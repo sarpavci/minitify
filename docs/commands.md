@@ -9,6 +9,7 @@ daemon keeps playing.
 | `minitify search <words>` | Searches tracks and plays the one you pick |
 | `minitify status` | Prints what is playing |
 | `minitify pause` | Pauses |
+| `minitify resume` | Resumes, transferring the session back to the player first |
 | `minitify next` | Next track |
 | `minitify prev` | Previous track |
 | `minitify vol <0-100>` | Sets the volume |

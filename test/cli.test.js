@@ -41,7 +41,7 @@ test('parseArgs rejects vol without a number', () => {
 });
 
 test('parseArgs passes the simple control commands through', () => {
-  for (const name of ['next', 'prev', 'pause', 'status', 'quit', 'login']) {
+  for (const name of ['next', 'prev', 'pause', 'resume', 'status', 'quit', 'login']) {
     assert.deepEqual(parseArgs([name]), { name, args: [] });
   }
 });

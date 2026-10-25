@@ -74,6 +74,10 @@ def main():
     root = pathlib.Path(__file__).resolve().parent.parent
     site = root / "site"
     assets = site / "assets"
+    # Rebuilt from scratch, so an asset deleted upstream stops being published
+    # instead of lingering here forever.
+    if assets.is_dir():
+        shutil.rmtree(assets)
     (assets / "stock").mkdir(parents=True, exist_ok=True)
 
     # Assets, minus the copyrighted cover.
@@ -86,14 +90,20 @@ def main():
 
     (assets / "album.svg").write_text(PLACEHOLDER_COVER)
 
-    # The landing page and its favicon want the animated mark.
-    shutil.copy2(root / ".github" / "assets" / "mark-dark.svg", assets / "mark.svg")
+    # The landing page and its favicon want the animated mark, in both
+    # schemes: the dark one is near-invisible on the light background.
+    for theme in ("dark", "light"):
+        shutil.copy2(root / ".github" / "assets" / f"mark-{theme}.svg",
+                     assets / f"mark-{theme}.svg")
 
     for src_name, out_name in PAGES.items():
         src = args.source / src_name
         if not src.exists():
-            print(f"missing page, skipped: {src_name}", file=sys.stderr)
-            continue
+            # Fatal, not a warning: skipping would leave the previous copy in
+            # site/ for Pages to deploy, which is exactly the drift this
+            # script exists to prevent.
+            print(f"missing page: {src_name}", file=sys.stderr)
+            return 1
         html = src.read_text(encoding="utf-8")
         # Every reference, however it is spelled: src="assets/album.jpg",
         # url('assets/album.jpg'), and the bare path inside JS templates.

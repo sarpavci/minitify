@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>minitify · design</title>
 <meta name="description" content="The interface, motion system and identity behind minitify, a small Spotify remote for the terminal.">
-<link rel="icon" href="assets/mark.svg">
+<link rel="icon" href="assets/mark-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="assets/mark-light.svg">
 <style>
 :root{
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Helvetica,Arial,sans-serif;
@@ -22,7 +23,7 @@ body{margin:0;background:var(--page);color:var(--text);
   font:16px/1.6 var(--font);-webkit-font-smoothing:antialiased}
 main{max-width:860px;margin:auto;padding:72px 28px 96px}
 header{display:flex;align-items:center;gap:16px;margin-bottom:28px}
-header img{display:block;width:56px;height:56px}
+header picture,header img{display:block;width:56px;height:56px}
 h1{margin:0;font-size:30px;font-weight:600;letter-spacing:-.03em}
 h1 span{color:var(--accent)}
 .lede{margin:0 0 44px;color:var(--muted);font-size:15px;max-width:62ch}
@@ -44,7 +45,10 @@ code{font-family:var(--mono);font-size:.9em}
 <body>
 <main>
   <header>
-    <img src="assets/mark.svg" alt="" width="56" height="56">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/mark-dark.svg">
+      <img src="assets/mark-light.svg" alt="" width="56" height="56">
+    </picture>
     <h1>mini<span>tify</span> · design</h1>
   </header>
 

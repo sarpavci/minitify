@@ -37,6 +37,13 @@ time.
 
 ### Launch
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../.github/assets/mark-loop-dark.svg">
+    <img src="../.github/assets/mark-light.svg" alt="The four beats, looping" width="96" height="96">
+  </picture>
+</p>
+
 The mark plays its four beats once — level meter, play triangle, level
 meter, **M** — and holds on the M. 3600 ms, one pass.
 
@@ -185,8 +192,8 @@ not fight it. Filtering uses
 
 **Reduce Motion:** rows are removed with `withAnimation: []`, so the
 list updates between frames. The equaliser stops entirely and renders as
-three static bars at 8 / 14 / 10 pt — the same marker the library
-already draws. A looping animation is exactly what the setting is for.
+three static bars at 7 / 12 / 9 pt in a 14 pt box — the same marker the
+library already draws. A looping animation is exactly what the setting is for.
 
 ### Panel drag
 

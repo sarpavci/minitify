@@ -105,17 +105,30 @@ document.querySelector('#launch-frames').innerHTML =
   const track= document.querySelector('.launch-track');
   const FRAMES = [...Array(8).keys()].map(k => lgLine('eq', k));
   const SETTLED = lgLine('play', 0);
-  let tick = 0;
-
-  setInterval(() => {
-    const phase = tick % 36;                       // 3.6 s at 100 ms
-    const line  = phase < 30 ? FRAMES[phase % 8] : SETTLED;
+  const LAST = LAUNCH_STEPS.length - 1;
+  const END = LAST * 18;                           // the tick "Ready" lands on
+  const paint = tick => {
+    const line = tick < 30 ? FRAMES[tick % 8] : SETTLED;
     if (eq) eq.textContent = line;
-    const i = Math.min(LAUNCH_STEPS.length - 1, Math.floor(tick / 18));
-    const done = i === LAUNCH_STEPS.length - 1;
+    const i = Math.min(LAST, Math.floor(tick / 18));
+    const done = i === LAST;
     if (step)  step.textContent = LAUNCH_STEPS[i] + (done ? '' : '…');
     if (label) label.textContent = LAUNCH_STEPS[i];
     if (track) track.textContent = done ? 'Instant Crush · Daft Punk' : '';
-    tick++;
-  }, 100);
+  };
+
+  // Reduce Motion gets the settled line and the final label straight away —
+  // a loading line cycling forever is exactly what the setting is for.
+  if (matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    paint(END);
+  } else {
+    let tick = 0;
+    const timer = setInterval(() => {
+      paint(tick);
+      // Stop once "Ready" is up: the line settles instead of cycling back
+      // through the meter frames behind a label that has stopped changing.
+      if (tick >= END) clearInterval(timer);
+      tick++;
+    }, 100);
+  }
 })();

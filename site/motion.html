@@ -1449,7 +1449,7 @@ footer{display:flex;justify-content:space-between;gap:32px;border-top:1px solid 
           <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code>; the equaliser is <code>(0.4, 0, 0.2, 1)</code> with <code>repeatCount = .infinity</code> and <code>autoreverses = false</code>.</dd>
           <dt class="still">STAYS STILL</dt><dd class="still">Row height, artwork, artist and duration. Starting a track does not re-sort, scroll or highlight the list — the only things that change are the colour of one title and where the badge sits. The scroll position is never animated on your behalf.</dd>
           <dt class="api">NATIVE API</dt><dd class="api">Selection is <code>NSTableView</code>'s own <code>selectionHighlightStyle</code>. The title colour and badge are <code>animator().alphaValue</code> / <code>textColor</code> inside <code>NSAnimationContext</code> on the reused cell view. The equaliser is three <code>CALayer</code>s with a <code>CAKeyframeAnimation</code> on <code>bounds.size.height</code>, paused by setting <code>layer.speed = 0</code> rather than removing the animation.</dd>
-          <dt>REDUCE MOTION</dt><dd>Selection and the green title change instantly. <b>The equaliser stops entirely</b> and renders as three static bars at 8 / 14 / 10 pt — the same marker the shipping library already draws. A looping animation is exactly what Reduce Motion exists to remove.</dd>
+          <dt>REDUCE MOTION</dt><dd>Selection and the green title change instantly. <b>The equaliser stops entirely</b> and renders as three static bars at 7 / 12 / 9 pt in a 14 pt box — the same marker the shipping library already draws. A looping animation is exactly what Reduce Motion exists to remove.</dd>
         </dl>
       </div>
     </div>
@@ -1767,7 +1767,7 @@ function toggleShuffle(b){
   b.setAttribute('aria-pressed', String(on));
   b.setAttribute('aria-label', on ? 'Shuffle on' : 'Shuffle off');
   if (on) bounce(b);
-  reportModes();
+  reportModes(b);
 }
 function advanceRepeat(b){
   const order = ['off', 'context', 'track'];
@@ -1777,10 +1777,15 @@ function advanceRepeat(b){
   else if (next === 'track'){ swapSym($('.sym', b)); }          // repeat → repeat.1, no bounce
   else { swapSym($('.sym', b)); b.classList.remove('on'); }
   b.setAttribute('aria-label', REPEAT[next]);
-  reportModes();
+  reportModes(b);
 }
-function reportModes(){
-  const sh = $('[data-toggle="shuffle"]'), rp = $('[data-repeat]');
+function reportModes(btn){
+  // Report the pair the click actually belongs to. Both the bench and the
+  // mode-switch mock carry a shuffle and a repeat button; reading the first
+  // in the document made the caption contradict the button just pressed.
+  const scope = (btn && btn.closest('.demo, .bench, section')) || document;
+  const sh = $('[data-toggle="shuffle"]', scope) || $('[data-toggle="shuffle"]');
+  const rp = $('[data-repeat]', scope) || $('[data-repeat]');
   setState('repeat', (sh && sh.classList.contains('on') ? 'shuffle on' : 'shuffle off') +
            ' · ' + REPEAT[rp ? rp.dataset.repeat : 'off'].toLowerCase());
 }
@@ -1855,7 +1860,10 @@ $$('[data-edge]').forEach(b => b.addEventListener('click', () => {
 }));
 
 /* ── sliders ───────────────────────────────────────────────────── */
-const fmt = n => Math.floor(n / 60) + ':' + String(Math.round(n) % 60).padStart(2, '0');
+// Both halves floor the same value. Mixing floor for minutes with round for
+// seconds makes 119.6 render as 1:00 — a minute backwards — and the scrub
+// demo feeds this fractional seconds straight from the pointer.
+const fmt = n => { const s = Math.floor(n); return (s / 60 | 0) + ':' + String(s % 60).padStart(2, '0'); };
 function initSlider(el){
   const fill = $('.rail i', el), thumb = $('.thumb', el);
   const max = +el.getAttribute('aria-valuemax');

@@ -606,7 +606,7 @@ function bounceAt(T, t0, axis, peak){
   return 'translateY(' + (-2.5*k).toFixed(2) + 'px) scale(' + s.toFixed(3) + ')';
 }
 function eqHeight(T, i, still){
-  if (still) return [8, 14, 10][i];
+  if (still) return [7, 12, 9][i];   // the marker the shipping library draws
   const per = [D.eq, D.eq * .78, D.eq * .92][i];
   const p = (T % per) / per;
   const K = [[[0,5],[.30,13],[.62,7],[1,5]],

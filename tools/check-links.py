@@ -11,7 +11,11 @@ import re
 import sys
 
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)")
-SKIP = ("http://", "https://", "#", "mailto:")
+# src=, href= and srcset= in HTML too. The first version of build-site.py
+# published a page whose styles.css and app.js were not copied with it;
+# checking only Markdown let that through.
+ATTR = re.compile(r'(?:src|href|srcset)="([^"]+)"')
+SKIP = ("http://", "https://", "//", "#", "mailto:", "data:")
 
 
 def main():
@@ -19,22 +23,27 @@ def main():
     broken = []
     checked = 0
 
-    for md in sorted(root.rglob("*.md")):
+    files = sorted(root.rglob("*.md")) + sorted(root.rglob("*.html"))
+    for doc in files:
         # Relative to the repo root, never the absolute path: a git worktree
         # lives under .claude/, which would otherwise skip every file.
-        rel = md.relative_to(root)
+        rel = doc.relative_to(root)
         if any(part in {".git", "node_modules", ".claude"} for part in rel.parts):
             continue
-        for match in LINK.finditer(md.read_text(encoding="utf-8")):
-            target = match.group(1)
-            if target.startswith(SKIP):
+        text = doc.read_text(encoding="utf-8")
+        # Markdown gets both: these files embed raw <picture> and <img> for
+        # the light/dark mark, which the bracket syntax cannot express.
+        patterns = (LINK, ATTR) if doc.suffix == ".md" else (ATTR,)
+        for match in (m for p in patterns for m in p.finditer(text)):
+            target = match.group(1).strip()
+            if target.startswith(SKIP) or not target:
                 continue
-            path = target.split("#", 1)[0]
+            path = target.split("#", 1)[0].split("?", 1)[0]
             if not path:
                 continue
             checked += 1
-            if not (md.parent / path).resolve().exists():
-                broken.append(f"{md.relative_to(root)} -> {target}")
+            if not (doc.parent / path).resolve().exists():
+                broken.append(f"{rel} -> {target}")
 
     for line in broken:
         print(f"broken link: {line}", file=sys.stderr)

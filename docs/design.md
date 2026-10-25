@@ -188,9 +188,19 @@ Two other states exist only inside the launch animation:
 
 See [motion.md](motion.md) for the sequence.
 
-Assets live in `.github/assets/`: `mark-dark.svg` and `mark-light.svg`
-for documentation, and `mark-template.svg` in `currentColor` for the
-app to load as a template `NSImage`.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../.github/assets/mark-still-dark.svg">
+    <img src="../.github/assets/mark-still-light.svg" alt="The resting mark" width="88" height="88">
+  </picture>
+</p>
+
+Assets live in `.github/assets/`, all produced by `tools/make-mark.py`:
+`mark-dark.svg` and `mark-light.svg` animate the four beats twice and
+settle, `mark-loop-*.svg` repeat forever, and `mark-still-*.svg` are the
+resting M alone. `mark-template.svg` is that same M in `currentColor`,
+ready for the app to load as a template `NSImage` — the player does not
+reference it yet, because the panel currently draws only SF Symbols.
 
 In the terminal the mark is drawn with block characters — four rows,
 one column per bar separated by a space, for the banner; and a single
