@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="minitify">
+  <title>minitify</title>
+  <linearGradient id="glight" x1="0" y1="0" x2="1" y2="0.35">
+    <stop offset="0" stop-color="#4fc07d"/>
+    <stop offset="1" stop-color="#0a6c3a"/>
+  </linearGradient>
+  <g fill="url(#glight)">
+    <rect x="6.5" y="12" width="7" height="40" rx="3.33">
+      <animate attributeName="height" values="37.34;31.16;8.51;20.28;40;40;11.29;33.74;9.66;42.4;40;40" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+      <animate attributeName="y" values="13.33;16.42;27.74;21.86;12;12;26.35;15.13;27.17;12;12;12" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+    </rect>
+    <rect x="17.5" y="12" width="7" height="18" rx="3.33">
+      <animate attributeName="height" values="7.95;25.19;18.38;16.08;27.67;27.67;9.79;7.22;36.74;19.08;18;18" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+      <animate attributeName="y" values="28.03;19.41;22.81;23.96;18.16;18.16;27.1;28.39;13.63;12;12;12" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+    </rect>
+    <rect x="28.5" y="12" width="7" height="24" rx="3.33">
+      <animate attributeName="height" values="24.98;21.46;17.4;36.71;23;23;33.55;6.77;24.41;25.44;24;24" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+      <animate attributeName="y" values="19.51;21.27;23.3;13.64;20.5;20.5;15.23;28.61;19.79;12;12;12" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+    </rect>
+    <rect x="39.5" y="12" width="7" height="18" rx="3.33">
+      <animate attributeName="height" values="18.71;15.26;37.99;27;10.67;10.67;12.76;33.97;32.89;19.08;18;18" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+      <animate attributeName="y" values="22.65;24.37;13.01;18.5;26.66;26.66;25.62;15.02;15.55;12;12;12" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+    </rect>
+    <rect x="50.5" y="12" width="7" height="40" rx="3.33">
+      <animate attributeName="height" values="21.42;34;24.29;36.82;6;6;12.39;8.92;18.88;42.4;40;40" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+      <animate attributeName="y" values="21.29;15;19.86;13.59;29;29;25.81;27.54;22.56;12;12;12" dur="3.6s" repeatCount="indefinite" fill="freeze" calcMode="spline" keyTimes="0;0.07;0.14;0.21;0.36;0.46;0.58;0.65;0.73;0.92;0.97;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.5 0 0.2 1;0 0 1 1;0.55 0 0.25 1;0.42 0 0.58 1;0.42 0 0.58 1;0.4 0 0.18 1;0.3 0 0.3 1;0 0 1 1"/>
+    </rect>
+  </g>
+</svg>

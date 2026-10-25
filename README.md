@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/mark-dark.svg">
-  <img src=".github/assets/mark-light.svg" alt="minitify" width="84" height="84">
+  <img src=".github/assets/mark-light.svg" alt="minitify" width="96" height="96">
 </picture>
 
 # minitify
@@ -14,6 +14,8 @@ Audio plays on this Mac, but nothing appears in the dock and no Spotify app runs
 [![macOS](https://img.shields.io/badge/macOS-14%2B-111?logo=apple&logoColor=white)](#requirements)
 [![Node](https://img.shields.io/badge/node-20%2B-111?logo=node.js&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-111)](LICENSE)
+
+[Setup](docs/spotify-setup.md) · [Commands](docs/commands.md) · [Architecture](docs/architecture.md) · [Design](docs/design.md) · [Motion](docs/motion.md) · [Troubleshooting](docs/troubleshooting.md)
 
 </div>
 
