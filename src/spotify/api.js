@@ -4,6 +4,7 @@ const BASE = 'https://api.spotify.com/v1';
 export const SEARCH_LIMIT = 10;
 
 const PLAYLIST_PAGE_LIMIT = 50;
+const MAX_PLAYLIST_PAGES = 20;
 
 function artistsOf(item) {
   return (item?.artists ?? []).map((a) => a.name).join(', ');
@@ -50,13 +51,24 @@ export function createApi({ getToken, fetchImpl = fetch }) {
 
   return {
     async listPlaylists() {
-      const data = await request('GET', `/me/playlists?limit=${PLAYLIST_PAGE_LIMIT}&offset=0`);
-      return (data?.items ?? []).map((p) => ({
-        name: p.name,
-        uri: p.uri,
-        // The February 2026 API moved this count from `tracks` to `items`.
-        trackCount: p.tracks?.total ?? p.items?.total ?? 0,
-      }));
+      const playlists = [];
+      let path = `/me/playlists?limit=${PLAYLIST_PAGE_LIMIT}&offset=0`;
+
+      // Bounded so a server that always advertises a next page cannot
+      // spin here forever.
+      for (let page = 0; page < MAX_PLAYLIST_PAGES && path; page += 1) {
+        const data = await request('GET', path);
+        for (const p of data?.items ?? []) {
+          playlists.push({
+            name: p.name,
+            uri: p.uri,
+            // The February 2026 API moved this count from `tracks` to `items`.
+            trackCount: p.tracks?.total ?? p.items?.total ?? 0,
+          });
+        }
+        path = data?.next ? data.next.replace(BASE, '') : null;
+      }
+      return playlists;
     },
 
     async search(query) {

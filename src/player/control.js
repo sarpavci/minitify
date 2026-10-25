@@ -3,11 +3,13 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_BIN = fileURLToPath(new URL('../../player/wkplayer', import.meta.url));
 
-export function createPlayer({ pagePort, onMediaKey, spawnImpl = spawn, binPath = DEFAULT_BIN }) {
+export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImpl = spawn, binPath = DEFAULT_BIN }) {
   let child = null;
   let deviceId = null;
   let lastError = null;
   let waiters = [];
+
+  const log = (line) => onLog?.(line);
 
   function settleReady(id) {
     deviceId = id;
@@ -29,7 +31,7 @@ export function createPlayer({ pagePort, onMediaKey, spawnImpl = spawn, binPath 
     else if (message.type === 'error') lastError = message.message;
   }
 
-  return {
+  const player = {
     get deviceId() {
       return deviceId;
     },
@@ -38,10 +40,25 @@ export function createPlayer({ pagePort, onMediaKey, spawnImpl = spawn, binPath 
       return lastError;
     },
 
+    get running() {
+      return child !== null;
+    },
+
     start() {
       if (child) return child;
-      const url = `http://127.0.0.1:${pagePort}/player`;
+
+      const url = `http://127.0.0.1:${pagePort}/player${pageSecret ? `?k=${pageSecret}` : ''}`;
       child = spawnImpl(binPath, [url], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      // Without this listener a missing or unbuilt binary emits an
+      // unhandled 'error' and takes the whole daemon down.
+      child.on?.('error', (err) => {
+        lastError = err.code === 'ENOENT'
+          ? `The player binary is missing — build it with: sh player/build.sh`
+          : `The player could not start: ${err.message}`;
+        log(lastError);
+        player.handleExit();
+      });
 
       let buffer = '';
       child.stdout?.on('data', (chunk) => {
@@ -51,12 +68,22 @@ export function createPlayer({ pagePort, onMediaKey, spawnImpl = spawn, binPath 
         for (const line of lines) if (line.trim()) handleLine(line);
       });
 
-      child.on?.('exit', () => {
-        child = null;
-        deviceId = null;
+      // stderr is piped, so it has to be drained — an undrained pipe fills
+      // at 64 KB and blocks the player's writes.
+      child.stderr?.on('data', (chunk) => log(`[player] ${chunk.toString().trim()}`));
+
+      child.on?.('exit', (code) => {
+        log(`player exited (code ${code})`);
+        player.handleExit();
       });
 
       return child;
+    },
+
+    // Separated so tests can simulate a death without a real process.
+    handleExit() {
+      child = null;
+      deviceId = null;
     },
 
     // Called by the daemon when the SDK page reports an event.
@@ -68,6 +95,10 @@ export function createPlayer({ pagePort, onMediaKey, spawnImpl = spawn, binPath 
 
     waitReady(timeoutMs = 5000) {
       if (deviceId) return Promise.resolve(deviceId);
+      // A player that died stays dead unless someone restarts it; waiting
+      // the full timeout on a corpse helps nobody.
+      if (!child) player.start();
+
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           waiters = waiters.filter((w) => w.timer !== timer);
@@ -84,8 +115,9 @@ export function createPlayer({ pagePort, onMediaKey, spawnImpl = spawn, binPath 
 
     stop() {
       child?.kill();
-      child = null;
-      deviceId = null;
+      player.handleExit();
     },
   };
+
+  return player;
 }

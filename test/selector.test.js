@@ -46,6 +46,24 @@ test('moveSelection stays at 0 for an empty list', () => {
   assert.equal(moveSelection(0, 1, 0), 0);
 });
 
+// A frame taller than the terminal scrolls, the cursor-up lands in the
+// wrong place, and the redraw erases the user's scrollback.
+test('renderList never returns more rows than the terminal has', () => {
+  const many = Array.from({ length: 50 }, (_, i) => ({ label: `item ${i}` }));
+  const rows = renderList(many, 0, 40, 10);
+  assert.ok(rows.length <= 10, `got ${rows.length} rows for a 10-row window`);
+});
+
+test('renderList keeps the selection inside the visible window', () => {
+  const many = Array.from({ length: 50 }, (_, i) => ({ label: `item ${i}` }));
+  const rows = renderList(many, 45, 40, 10);
+  assert.ok(rows.some((r) => r.startsWith('>') && r.includes('item 45')), 'selected row must be visible');
+});
+
+test('renderList shows the whole list when it fits', () => {
+  assert.equal(renderList(items, 0, 40, 10).length, 3);
+});
+
 test('select resolves null immediately for an empty list', async () => {
   const printed = [];
   const result = await select([], { header: 'Playlists', write: (s) => printed.push(s) });

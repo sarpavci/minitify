@@ -12,8 +12,20 @@ export function truncate(text, width) {
   return text.slice(0, width - 1) + '…';
 }
 
-export function renderList(items, selectedIndex, width = DEFAULT_WIDTH) {
-  return items.map((item, index) => {
+// Keeps the frame inside the terminal. A list taller than the window would
+// scroll, which sends the cursor-up redraw to the wrong line and erases the
+// user's scrollback.
+export function visibleWindow(length, selectedIndex, maxRows) {
+  if (!maxRows || length <= maxRows) return { start: 0, end: length };
+  const half = Math.floor(maxRows / 2);
+  const start = Math.min(Math.max(0, selectedIndex - half), length - maxRows);
+  return { start, end: start + maxRows };
+}
+
+export function renderList(items, selectedIndex, width = DEFAULT_WIDTH, maxRows = 0) {
+  const { start, end } = visibleWindow(items.length, selectedIndex, maxRows);
+  return items.slice(start, end).map((item, offset) => {
+    const index = start + offset;
     const prefix = index === selectedIndex ? MARKER : INDENT;
     return prefix + truncate(item.label, Math.max(0, width - prefix.length));
   });
@@ -28,9 +40,11 @@ export function moveSelection(index, delta, length) {
  * Shows a keyboard-driven list. Resolves the chosen item, or null when the
  * user escapes or the list is empty.
  */
-export function select(items, { header, width, input = process.stdin, write } = {}) {
+export function select(items, { header, width, rows, input = process.stdin, write } = {}) {
   const out = write ?? ((s) => process.stdout.write(s));
   const columns = width ?? process.stdout.columns ?? DEFAULT_WIDTH;
+  // Leave room for the header and the line the shell prints after us.
+  const maxRows = Math.max(3, (rows ?? process.stdout.rows ?? 24) - (header ? 2 : 1));
 
   if (!items.length) {
     out('No items\n');
@@ -45,11 +59,11 @@ export function select(items, { header, width, input = process.stdin, write } = 
       // Walk back over the previous frame instead of clearing the screen,
       // so whatever was in the terminal before stays put.
       if (drawnLines) out(`\x1b[${drawnLines}A\x1b[0J`);
-      const rows = [];
-      if (header) rows.push(truncate(header, columns));
-      rows.push(...renderList(items, selected, columns));
-      out(rows.join('\n') + '\n');
-      drawnLines = rows.length;
+      const frame = [];
+      if (header) frame.push(truncate(header, columns));
+      frame.push(...renderList(items, selected, columns, maxRows));
+      out(frame.join('\n') + '\n');
+      drawnLines = frame.length;
     };
 
     const finish = (value) => {

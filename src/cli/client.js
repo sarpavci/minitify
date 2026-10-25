@@ -63,7 +63,10 @@ export async function connectOrStart({
     }
   }
 
-  throw new Error('could not start the minitify daemon');
+  throw new Error(
+    `could not start the minitify daemon — see ${configPath('daemon.log')}\n` +
+      'If the player was never built, run: sh player/build.sh',
+  );
 }
 
 export async function sendCommand(cmd, options) {

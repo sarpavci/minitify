@@ -94,6 +94,12 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                       message["type"] as? String == "nowplaying" else { continue }
                 DispatchQueue.main.async { self.updateNowPlaying(message) }
             }
+
+            // stdin closed: the daemon is gone. Nothing can reach this
+            // process any more — no dock icon, no window, no socket — so
+            // staying alive would leave music playing with no way to stop
+            // it short of pkill.
+            exit(0)
         }
     }
 

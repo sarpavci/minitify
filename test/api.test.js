@@ -70,6 +70,25 @@ test('listPlaylists tolerates a playlist with no track count', async () => {
 
 // Since the February 2026 API changes the count arrives under `items`,
 // not `tracks`. Older shapes still turn up, so both are read.
+// A library with more than one page would otherwise be silently cut off.
+test('listPlaylists follows pagination', async () => {
+  const page1 = { items: [{ name: 'A', uri: 'u1' }], next: 'https://api.spotify.com/v1/me/playlists?offset=50&limit=50' };
+  const page2 = { items: [{ name: 'B', uri: 'u2' }], next: null };
+  const f = stubFetch({ body: page1 }, { body: page2 });
+  const result = await api(f).listPlaylists();
+  assert.deepEqual(result.map((p) => p.name), ['A', 'B']);
+  assert.equal(f.calls.length, 2);
+});
+
+test('listPlaylists stops at a sane page count', async () => {
+  // A server that always advertises a next page must not loop forever.
+  const endless = { items: [{ name: 'x', uri: 'u' }], next: 'https://api.spotify.com/v1/me/playlists?offset=50' };
+  const f = stubFetch({ body: endless });
+  const result = await api(f).listPlaylists();
+  assert.ok(f.calls.length <= 20, `made ${f.calls.length} requests`);
+  assert.ok(result.length > 0);
+});
+
 test('listPlaylists reads the track count from the items field', async () => {
   const f = stubFetch({
     body: { items: [{ name: 'Focus', uri: 'spotify:playlist:1', items: { total: 9 } }] },

@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
 import { loadTokens, saveTokens, saveConfig, isExpired } from '../config.js';
 
@@ -19,12 +20,16 @@ const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 export const REDIRECT_PORT = 8888;
 export const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
 
-export function authorizeUrl(clientId, redirectUri) {
+// Without `state`, any page the user visits during the login window can
+// drive their browser to the loopback callback with an attacker's code and
+// bind minitify to the attacker's Spotify account.
+export function authorizeUrl(clientId, redirectUri, state = randomBytes(16).toString('hex')) {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
     scope: SCOPES,
     redirect_uri: redirectUri,
+    state,
   });
   return `${AUTHORIZE_URL}?${params}`;
 }
@@ -80,20 +85,43 @@ export async function refresh(tokens, creds, fetchImpl = fetch) {
   return withExpiry(data, tokens);
 }
 
+// Spotify rotates the refresh token on some responses, so two refreshes
+// racing would leave the loser's saved token dead. Callers share one.
+let inFlightRefresh = null;
+
 export async function getAccessToken(creds, fetchImpl = fetch) {
   const tokens = loadTokens();
   if (!tokens?.refresh_token) throw new Error('Not logged in. Run: minitify login');
   if (!isExpired(tokens)) return tokens.access_token;
 
-  const renewed = await refresh(tokens, creds, fetchImpl);
-  saveTokens(renewed);
-  return renewed.access_token;
+  if (!inFlightRefresh) {
+    inFlightRefresh = refresh(tokens, creds, fetchImpl)
+      .then((renewed) => {
+        saveTokens(renewed);
+        return renewed.access_token;
+      })
+      .catch((err) => {
+        if (/invalid_grant|revoked/i.test(err.message)) {
+          throw new Error(`Spotify rejected the saved login. Run: minitify login`);
+        }
+        throw err;
+      })
+      .finally(() => {
+        inFlightRefresh = null;
+      });
+  }
+  return inFlightRefresh;
 }
 
 // Runs the loopback leg of the authorization code flow. Not unit tested:
 // it binds a port and opens a browser.
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
 export function login({ clientId, clientSecret }) {
   const creds = { clientId, clientSecret, redirectUri: REDIRECT_URI };
+  const expectedState = randomBytes(16).toString('hex');
 
   return new Promise((resolve, reject) => {
     const server = createServer(async (req, res) => {
@@ -106,10 +134,18 @@ export function login({ clientId, clientSecret }) {
       const failure = url.searchParams.get('error');
       const code = url.searchParams.get('code');
 
+      // Rejects a callback the user's browser was driven to by another page.
+      if (url.searchParams.get('state') !== expectedState) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<p>This login did not come from minitify.</p>');
+        server.close();
+        return reject(new Error('Spotify login failed: unexpected state'));
+      }
+
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
         failure
-          ? `<p>Login failed: ${failure}</p>`
+          ? `<p>Login failed: ${escapeHtml(failure)}</p>`
           : '<p>minitify is connected. You can close this tab.</p>',
       );
       server.close();
@@ -128,7 +164,7 @@ export function login({ clientId, clientSecret }) {
 
     server.on('error', reject);
     server.listen(REDIRECT_PORT, '127.0.0.1', () => {
-      const url = authorizeUrl(clientId, REDIRECT_URI);
+      const url = authorizeUrl(clientId, REDIRECT_URI, expectedState);
       console.log('Opening Spotify authorization in your browser:');
       console.log(url);
       spawn('open', [url], { stdio: 'ignore' }).unref();

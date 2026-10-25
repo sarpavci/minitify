@@ -2,7 +2,7 @@
 // SDK's DRM playback) only works in a secure context, and a loopback
 // origin counts as one. Loading this markup with loadHTMLString would
 // give it an about:blank origin and no EME.
-export function playerPage(token, deviceName) {
+export function playerPage(token, deviceName, secret) {
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>minitify player</title></head>
@@ -11,9 +11,10 @@ export function playerPage(token, deviceName) {
 <script>
 const INITIAL_TOKEN = ${JSON.stringify(token)};
 const DEVICE_NAME = ${JSON.stringify(deviceName)};
+const KEY = ${JSON.stringify(secret ? `?k=${secret}` : '')};
 
 function report(kind, data) {
-  fetch('/event', {
+  fetch('/event' + KEY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind: kind, data: data || {} }),
@@ -23,7 +24,7 @@ function report(kind, data) {
 // Access tokens live about an hour. Ask the daemon for a fresh one every
 // time the SDK needs it, so a long-running player keeps working.
 function provideToken(cb) {
-  fetch('/token')
+  fetch('/token' + KEY)
     .then(function (r) { return r.json(); })
     .then(function (j) { cb(j.token); })
     .catch(function () { cb(INITIAL_TOKEN); });

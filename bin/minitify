@@ -51,7 +51,16 @@ async function pickAndPlay(items, { header, emptyMessage }) {
     return;
   }
   const choice = await select(items, { header });
-  if (choice) await send({ name: 'play', args: [choice.uri] });
+  if (!choice) return;
+
+  // Starting the player takes a few seconds on a cold daemon; without this
+  // the command just looks hung after the user presses Enter.
+  const notice = setTimeout(() => process.stderr.write('preparing the player…\n'), 400);
+  try {
+    await send({ name: 'play', args: [choice.uri] });
+  } finally {
+    clearTimeout(notice);
+  }
 }
 
 const argv = process.argv.slice(2);
@@ -71,10 +80,10 @@ try {
 if (cmd.name === 'login') {
   await runLogin().catch((err) => fail(err.message));
 } else if (cmd.name === 'playlists') {
-  const [playlists, status] = await Promise.all([
-    send({ name: 'playlists' }),
-    send({ name: 'status' }),
-  ]);
+  // Sequential on purpose: two concurrent sends on a cold start would each
+  // find no socket and each spawn a daemon.
+  const playlists = await send({ name: 'playlists' });
+  const status = await send({ name: 'status' });
   await pickAndPlay(
     playlists.map((p) => ({ ...p, label: `${p.name}  (${p.trackCount})` })),
     { header: formatStatus(status), emptyMessage: 'No playlists in your library.' },

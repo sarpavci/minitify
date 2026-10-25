@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { connect as netConnect } from 'node:net';
 
 import { playerPage } from '../src/daemon/page.js';
 import { startHttpServer } from '../src/daemon/http.js';
@@ -51,6 +52,70 @@ test('POST /event forwards kind and data to onEvent', async () => {
       body: JSON.stringify({ kind: 'ready', data: { device_id: 'DEV' } }),
     });
     assert.deepEqual(seen, [['ready', { device_id: 'DEV' }]]);
+  } finally {
+    await server.close();
+  }
+});
+
+// The access token carries streaming, playback-control and library scopes.
+// Without a check, any local process can curl it off the loopback port, and
+// a web page can reach it through DNS rebinding.
+test('/token refuses a request without the secret', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {}, secret: 's3cret' });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/token`);
+    assert.equal(res.status, 403);
+    assert.ok(!(await res.text()).includes('T'), 'the token must not leak in the body');
+  } finally {
+    await server.close();
+  }
+});
+
+test('/token answers when the secret matches', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {}, secret: 's3cret' });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/token?k=s3cret`);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).token, 'T');
+  } finally {
+    await server.close();
+  }
+});
+
+test('/event refuses a forged event without the secret', async () => {
+  const seen = [];
+  const server = await startHttpServer({
+    token: 'T', deviceName: 'd', secret: 's3cret', onEvent: (k, d) => seen.push([k, d]),
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'ready', data: { device_id: 'ATTACKER' } }),
+    });
+    assert.equal(res.status, 403);
+    assert.deepEqual(seen, [], 'a forged ready must not reach the daemon');
+  } finally {
+    await server.close();
+  }
+});
+
+// A browser lured to the daemon through DNS rebinding sends the attacker's
+// hostname in Host; a loopback client never does. fetch() cannot set Host
+// (it is a forbidden header), so this speaks HTTP directly.
+test('a request with a foreign Host header is refused', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {}, secret: 's' });
+  try {
+    const status = await new Promise((resolve, reject) => {
+      const socket = netConnect(server.port, '127.0.0.1', () => {
+        socket.write('GET /token?k=s HTTP/1.1\r\nHost: evil.example.com\r\nConnection: close\r\n\r\n');
+      });
+      let data = '';
+      socket.on('data', (c) => { data += c; });
+      socket.on('end', () => resolve(Number(data.split(' ')[1])));
+      socket.on('error', reject);
+    });
+    assert.equal(status, 403);
   } finally {
     await server.close();
   }

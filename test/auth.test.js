@@ -107,3 +107,42 @@ test('getAccessToken refreshes and stores an expired token', async () => {
 test('getAccessToken points at login when there are no tokens', async () => {
   await assert.rejects(() => getAccessToken(CREDS, fakeFetch({ body: {} })), /minitify login/);
 });
+
+// Spotify rotates the refresh token on some responses. Two concurrent
+// refreshes would both POST, and the loser's saved token is then dead.
+test('concurrent getAccessToken calls share one refresh', async () => {
+  saveTokens({ access_token: 'stale', refresh_token: 'r', expires_at: Date.now() - 1000 });
+  const f = fakeFetch({ body: { access_token: 'fresh', expires_in: 3600 } });
+  const [a, b, c] = await Promise.all([
+    getAccessToken(CREDS, f),
+    getAccessToken(CREDS, f),
+    getAccessToken(CREDS, f),
+  ]);
+  assert.deepEqual([a, b, c], ['fresh', 'fresh', 'fresh']);
+  assert.equal(f.calls.length, 1, 'only one refresh request should go out');
+});
+
+test('a later expiry refreshes again rather than reusing the memo', async () => {
+  saveTokens({ access_token: 'stale', refresh_token: 'r', expires_at: Date.now() - 1000 });
+  const f = fakeFetch({ body: { access_token: 'fresh', expires_in: 3600 } });
+  await getAccessToken(CREDS, f);
+  saveTokens({ access_token: 'stale2', refresh_token: 'r', expires_at: Date.now() - 1000 });
+  await getAccessToken(CREDS, f);
+  assert.equal(f.calls.length, 2);
+});
+
+test('a failed refresh points at login', async () => {
+  saveTokens({ access_token: 'stale', refresh_token: 'bad', expires_at: Date.now() - 1000 });
+  const f = fakeFetch({ ok: false, status: 400, body: { error: 'invalid_grant' } });
+  await assert.rejects(() => getAccessToken(CREDS, f), /minitify login/);
+});
+
+test('authorizeUrl carries a state parameter', () => {
+  const state = new URL(authorizeUrl('id', CREDS.redirectUri)).searchParams.get('state');
+  assert.ok(state && state.length >= 16, 'state must be present and unguessable');
+});
+
+test('authorizeUrl generates a different state each time', () => {
+  const stateOf = () => new URL(authorizeUrl('id', CREDS.redirectUri)).searchParams.get('state');
+  assert.notEqual(stateOf(), stateOf());
+});
