@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>minitify · design</title>
+<meta name="description" content="The interface, motion system and identity behind minitify, a small Spotify remote for the terminal.">
+<link rel="icon" href="assets/mark-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="assets/mark-light.svg">
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --page:#0b0f12;--text:#e9eef1;--muted:#8d9aa2;--line:#ffffff14;
+  --card:#141a1e;--card-line:#ffffff12;--accent:#87e6a6;
+}
+@media (prefers-color-scheme: light){
+  :root{--page:#eef2f4;--text:#1b2226;--muted:#5d6a71;--line:#17283218;
+        --card:#fff;--card-line:#17283216;--accent:#0f8a4a}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);
+  font:16px/1.6 var(--font);-webkit-font-smoothing:antialiased}
+main{max-width:860px;margin:auto;padding:72px 28px 96px}
+header{display:flex;align-items:center;gap:16px;margin-bottom:28px}
+header picture,header img{display:block;width:56px;height:56px}
+h1{margin:0;font-size:30px;font-weight:600;letter-spacing:-.03em}
+h1 span{color:var(--accent)}
+.lede{margin:0 0 44px;color:var(--muted);font-size:15px;max-width:62ch}
+.lede a{color:inherit}
+ul{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--card);
+  border:1px solid var(--card-line);border-radius:16px;padding:22px 24px;transition:border-color .16s}
+a.card:hover,a.card:focus-visible{border-color:var(--accent)}
+a.card b{display:block;font-size:18px;font-weight:600;letter-spacing:-.015em;margin-bottom:5px}
+a.card span{display:block;color:var(--muted);font-size:14px}
+a.card em{font-style:normal;color:var(--accent);font-size:11px;letter-spacing:.08em;
+  display:block;margin-bottom:9px}
+footer{margin-top:52px;border-top:1px solid var(--line);padding-top:20px;
+  font-size:13px;color:var(--muted);line-height:1.8}
+footer a{color:inherit}
+code{font-family:var(--mono);font-size:.9em}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/mark-dark.svg">
+      <img src="assets/mark-light.svg" alt="" width="56" height="56">
+    </picture>
+    <h1>mini<span>tify</span> · design</h1>
+  </header>
+
+  <p class="lede">
+    The reference material behind
+    <a href="https://github.com/sarpavci/minitify">minitify</a>, a small Spotify remote
+    for the terminal: audio plays on your Mac with no dock icon and no Spotify app.
+    These four pages are the authority for anything visual — the written summaries live in
+    <a href="https://github.com/sarpavci/minitify/tree/main/docs"><code>docs/</code></a>.
+  </p>
+
+  <ul>
+    <li><a class="card" href="film.html">
+      <em>30 SECONDS · AUTOPLAYS</em>
+      <b>The film</b>
+      <span>One continuous take: the terminal starts it, the panel arrives, it grows
+      through its three modes, the library opens, the panel is dragged to the edge and
+      settles. 900 frames, scrubbable a frame at a time.</span></a></li>
+
+    <li><a class="card" href="motion.html">
+      <em>ELEVEN FEATURES · LIVE</em>
+      <b>The motion system</b>
+      <span>Five curves, four duration bands, and for every feature a beat map, the
+      Core Animation or SF Symbols call that carries it, and its Reduce Motion
+      fallback. Every demo is replayable at true size.</span></a></li>
+
+    <li><a class="card" href="ui.html">
+      <em>MINI · NORMAL · EXTENDED · LIBRARY</em>
+      <b>The interface</b>
+      <span>All three panel modes and the library window at actual size, draggable,
+      in light and dark, over a real desktop.</span></a></li>
+
+    <li><a class="card" href="logo.html">
+      <em>PARAMETRIC</em>
+      <b>The mark</b>
+      <span>Five bars that play a level meter, fall into a play triangle and rise into
+      an M. Every number behind it is on a slider.</span></a></li>
+  </ul>
+
+  <footer>
+    Album artwork on these pages is a placeholder. minitify ships no artwork — every
+    cover comes from Spotify at runtime.<br>
+    Desktop photograph by
+    <a href="https://pixabay.com/users/StockSnap-894430/">StockSnap</a> on Pixabay,
+    under the <a href="https://pixabay.com/service/license-summary/">Pixabay Content
+    License</a>.<br>
+    minitify is not affiliated with Spotify.
+  </footer>
+</main>
+</body>
+</html>

@@ -5,7 +5,7 @@ export const USAGE = `minitify — a small Spotify remote
   minitify                   pick a playlist
   minitify search <words>    pick from search results
   minitify status            what is playing
-  minitify next|prev|pause
+  minitify next|prev|pause|resume
   minitify vol <0-100>
   minitify shuffle [on|off]  toggle without an argument
   minitify repeat [off|all|one]

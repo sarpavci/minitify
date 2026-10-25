@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="en" data-reduce="off">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>minitify — one take</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   minitify · film
+
+   One continuous take over one desktop. 1920 × 1080, 30 fps,
+   900 frames. Every visible value is a pure function of the frame
+   index — there is not one CSS transition or animation in this file,
+   because the film has to be seekable and renderable frame by frame.
+   The durations and curves themselves are not invented here: they
+   are read straight out of motion.html. See FILM_META at the end.
+   ══════════════════════════════════════════════════════════════════ */
+:root{
+  --green:#87e6a6; --green-2:#9ce8b5; --green-deep:#3fb673;
+  --label:#f2f3f5; --secondary:#b4bec5;
+  --material:rgba(30,35,39,.82); --strip:rgba(9,14,18,.38);
+  --rule:#ffffff22; --hover:#ffffff1c; --row:#ffffff10; --field:#11182044;
+  --active:#9ce8b5;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --ink:#0b0d0f; --chrome:#15181b; --chrome-line:#ffffff14;
+  --chrome-text:#e7ecef; --chrome-dim:#8b959c;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--ink);color:var(--chrome-text);font:15px/1.6 var(--font);
+  -webkit-font-smoothing:antialiased;overflow:hidden;display:flex;flex-direction:column}
+
+/* ── viewport ─────────────────────────────────────────────────── */
+#screen{flex:1;min-height:0;position:relative;overflow:hidden;background:#07090b}
+#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;
+  transform-origin:0 0;background:#2b3f48}
+#world{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;
+  will-change:transform}
+
+.wall{position:absolute;inset:0;background:#425b63 url('assets/stock/desktop.jpg') center/cover}
+.wall:after{content:"";position:absolute;inset:0;background:#07192652}
+.menubar{position:absolute;top:0;left:0;right:0;height:26px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 18px;background:#13252c4d;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  font-size:11px;letter-spacing:.01em;color:#eef3f5}
+.menubar b{font-weight:600;margin-right:18px}
+.menubar nav{display:flex;gap:18px;color:#e2eaed}
+
+/* ── terminal ─────────────────────────────────────────────────── */
+#term{position:absolute;left:300px;top:300px;width:560px;border-radius:10px;overflow:hidden;
+  background:#101a20f5;box-shadow:0 22px 48px #0007,inset 0 0 0 .5px #ffffff26}
+.term-bar{display:flex;align-items:center;gap:7px;height:30px;padding:0 12px;
+  background:#18252cf5;border-bottom:.5px solid #ffffff14}
+.term-bar i{width:11px;height:11px;border-radius:50%;background:#ffffff26}
+.term-bar span{margin-left:8px;font:11px var(--mono);color:#8fa0a8;letter-spacing:.01em}
+.term-body{padding:16px 18px 18px;font:13px/1.6 var(--mono);color:#b7c6c1;white-space:pre}
+.term-cmd{display:block;color:#dfe7e4;margin-bottom:12px}
+.term-banner{display:block;color:#87e6a6;line-height:1.08;font-size:15px}
+.term-banner span{display:block}
+.term-word{display:block;margin:8px 0 14px;color:#dfe7e4;font-size:11px}
+.term-load{display:block;color:#8fa0a8;min-height:21px}
+.term-eq{color:#87e6a6;letter-spacing:.04em}
+.caret{display:inline-block;width:7px;height:14px;background:#87e6a6;vertical-align:-2px;
+  margin-left:3px}
+
+/* ── the floating panel ───────────────────────────────────────── */
+#panel{position:absolute;overflow:hidden;color:var(--label);background:var(--material);
+  backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);
+  box-shadow:0 14px 32px #0005,inset 0 0 0 .5px #ffffff3b;will-change:left,top,width,height}
+.face{position:absolute;inset:0}
+
+/* launch face */
+#cardFace{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#cardFace .status{display:flex;flex-direction:column;align-items:center;gap:4px;height:36px}
+#cardFace .stage-label{font-size:13px;font-weight:550;letter-spacing:-.005em;white-space:nowrap}
+#cardFace .stage-track{font-size:11px;color:var(--secondary);letter-spacing:.01em}
+
+/* player face */
+.lay{position:absolute}
+.art{display:block;object-fit:cover;box-shadow:0 0 0 .5px #0002}
+.title{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.artist{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--secondary)}
+.seek{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;align-items:center;gap:6px;
+  font-size:11px;letter-spacing:.01em;color:var(--secondary);font-variant-numeric:tabular-nums}
+.seek .t2{text-align:right}
+.rail{position:relative;height:3px;border-radius:2px;background:var(--rule)}
+.rail i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--active)}
+#strip{background:var(--strip)}
+.row-h{display:flex;align-items:center}
+.icon{display:block;background:currentColor;flex:none;pointer-events:none;
+  mask:center no-repeat var(--symbol);-webkit-mask:center no-repeat var(--symbol)}
+.btn{display:flex;align-items:center;justify-content:center;border-radius:6px;flex:none;
+  position:relative}
+.sym{position:relative;display:grid;place-items:center;flex:none}
+.sym>.icon{grid-area:1/1}
+#playBtn{border-radius:50%;display:flex;align-items:center;justify-content:center}
+#modesGroup{border-left:.5px solid var(--rule);border-right:.5px solid var(--rule);padding:0 10px;
+  height:24px}
+#queue{overflow:hidden;border-top:.5px solid var(--rule)}
+.q-head{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;
+  font-size:11px;letter-spacing:.01em;color:var(--secondary)}
+.q-head b{font-weight:550;color:var(--label)}
+.q-row{height:48px;display:flex;align-items:center;gap:10px;padding:4px 20px}
+.q-row img{width:32px;height:32px;border-radius:4px;object-fit:cover;flex:none}
+.q-row div{flex:1;min-width:0}
+.q-row .title{font-size:12px;line-height:1.5;letter-spacing:0}
+.q-row .artist{font-size:10px;line-height:1.4;letter-spacing:.01em}
+.q-row .dur{font-size:11px;color:var(--secondary);font-variant-numeric:tabular-nums}
+
+/* detached circles */
+.orb{position:absolute;width:28px;height:28px;border-radius:50%;background:#323d45ec;
+  color:#e1e9ee;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px #0003}
+.orb .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+
+/* ── library window ───────────────────────────────────────────── */
+#library{position:absolute;left:560px;top:300px;width:800px;height:500px;display:flex;
+  flex-direction:column;overflow:hidden;border-radius:16px;color:var(--label);
+  background:var(--material);backdrop-filter:blur(24px) saturate(1.4);
+  -webkit-backdrop-filter:blur(24px) saturate(1.4);
+  box-shadow:0 14px 32px #0005,inset 0 0 0 .5px #ffffff3b;transform-origin:50% 54%}
+.lib-top{display:flex;align-items:center;gap:20px;height:64px;flex:none;padding:12px 20px;
+  border-bottom:.5px solid var(--rule);background:var(--strip)}
+.lib-brand{display:flex;align-items:center;gap:8px;width:160px;flex:none}
+.lib-brand em{font-style:normal;font-size:15px;font-weight:600;letter-spacing:-.03em}
+.lib-brand em i{font-style:normal;color:var(--active)}
+.search{display:flex;align-items:center;gap:6px;background:var(--field);
+  border:.5px solid var(--rule);height:32px;border-radius:7px;flex:1;padding:0 9px;
+  color:var(--secondary);font-size:13px}
+.search .icon{width:20px;height:20px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.search .q{color:var(--label)}
+.search .ph{color:var(--secondary)}
+.lib-body{display:grid;grid-template-columns:200px minmax(0,1fr);flex:1;min-height:0}
+.sidebar{display:flex;flex-direction:column;padding:16px 12px;border-right:.5px solid var(--rule);
+  background:var(--strip)}
+.sb{display:flex;align-items:center;gap:10px;height:56px;border-radius:6px;padding:8px;
+  color:var(--secondary);flex:none}
+.sb.on{color:var(--label);background:var(--hover)}
+.sb img{width:32px;height:32px;border-radius:5px;object-fit:cover;flex:none}
+.sb .liked{width:32px;height:32px;border-radius:5px;flex:none;display:flex;align-items:center;
+  justify-content:center;background:var(--strip);border:.5px solid var(--rule);color:var(--active)}
+.sb .liked .icon{width:20px;height:20px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.sb span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sb b{font-size:12px;font-weight:550;white-space:nowrap}
+.sb small{font-size:10px;letter-spacing:.01em;color:var(--secondary)}
+.sb.on b{font-weight:600}
+.divider{height:.5px;background:var(--rule);margin:14px 8px}
+.sidebar h3{font-size:9px;letter-spacing:.08em;color:var(--secondary);font-weight:550;margin:0 12px 8px}
+.pane{display:flex;flex-direction:column;padding:16px 12px 0;overflow:hidden;min-width:0}
+.coll{display:flex;align-items:center;gap:16px;height:112px;flex:none;padding:0 8px 16px}
+.coll img{width:88px;height:88px;border-radius:8px;object-fit:cover;flex:none}
+.kicker{font-size:9px;letter-spacing:.08em;color:var(--secondary);font-weight:550}
+.coll h2{font-size:28px;letter-spacing:-.02em;line-height:1.15;font-weight:600;margin:2px 0 4px}
+.coll p{font-size:11px;letter-spacing:.01em;color:var(--secondary)}
+.thead{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1fr) 40px 28px;gap:12px;
+  height:28px;align-items:center;flex:none;padding:0 8px;font-size:10px;letter-spacing:.02em;
+  color:var(--secondary);border-bottom:.5px solid var(--rule)}
+.scroll{flex:1;min-height:0;overflow:hidden;padding-top:8px}
+.list{display:flex;flex-direction:column}
+.lrow{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1fr) 40px 28px;gap:12px;
+  align-items:center;height:40px;padding:0 8px;border-radius:8px;background:var(--row);
+  box-shadow:inset 0 0 0 .5px var(--rule);font-size:12px;overflow:hidden}
+.lrow .art-cell{position:relative;width:28px;height:28px;flex:none}
+.lrow .art-cell img{width:28px;height:28px;border-radius:5px;object-fit:cover;display:block}
+.lrow .rt{display:block;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-weight:550}
+.lrow .artist{font-size:11px;letter-spacing:.01em}
+.lrow .dur{font-size:11px;color:var(--secondary);font-variant-numeric:tabular-nums}
+.lrow .heart{width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  color:var(--secondary);opacity:.6;border-radius:6px}
+.lrow .heart.on{opacity:1;color:var(--active)}
+.lrow .heart .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.listend{font-size:10px;letter-spacing:.01em;color:var(--secondary);text-align:center;padding:14px 0}
+.nowbar{display:flex;align-items:center;gap:10px;height:56px;flex:none;padding:0 8px;
+  border-top:.5px solid var(--rule)}
+.nowbar img{width:32px;height:32px;border-radius:4px;object-fit:cover}
+.nowbar div{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.nowbar .k{font-size:8px;letter-spacing:.08em;color:var(--active)}
+.nowbar strong{font-size:11px;font-weight:550;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.nowbar small{font-size:10px;letter-spacing:.01em;color:var(--secondary);font-weight:400}
+
+/* the equaliser that marks the playing row */
+.eq{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:14px;height:14px;
+  color:var(--active);flex:none}
+.eq i{display:block;width:2px;border-radius:1px;background:currentColor;height:7px}
+.art-cell .eq{position:absolute;right:-1px;bottom:-1px;border-radius:3px;background:#10171be6;
+  padding:1px;width:14px;height:14px}
+
+.logo{display:block;flex:none;fill:var(--active)}
+
+/* ── transport controls (hud) ─────────────────────────────────── */
+#hud{flex:none;display:flex;align-items:center;gap:16px;padding:12px 20px;
+  background:var(--chrome);border-top:1px solid var(--chrome-line)}
+#hud button{appearance:none;border:1px solid var(--chrome-line);background:#1b1f23;
+  color:var(--chrome-text);font:inherit;font-size:12px;letter-spacing:.01em;
+  padding:8px 14px;border-radius:8px;cursor:pointer}
+#hud button:hover{border-color:var(--green-deep)}
+#hud button[aria-pressed=true]{background:var(--green);border-color:var(--green);
+  color:#0d2417;font-weight:600}
+#hud button:focus-visible,#scrub:focus-visible{outline:2px solid #54b77a;outline-offset:2px}
+#playpause{width:112px}
+.track-wrap{flex:1;min-width:0;position:relative;display:flex;align-items:center;height:28px}
+#scrub{width:100%;height:28px;margin:0;background:transparent;cursor:pointer;accent-color:var(--green)}
+#ticks{position:absolute;left:0;right:0;top:19px;height:7px;pointer-events:none}
+#ticks i{position:absolute;top:0;width:1px;height:7px;background:#ffffff33}
+#ticks i.major{background:#87e6a685;height:7px}
+.readout{flex:none;display:flex;align-items:baseline;gap:12px;font:12px var(--mono);
+  color:var(--chrome-dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.readout b{color:var(--chrome-text);font-weight:400}
+.readout em{font-style:normal;color:var(--green);font-family:var(--font);font-size:11.5px;
+  letter-spacing:.01em}
+.hint{flex:none;font-size:11px;letter-spacing:.01em;color:#636d74}
+@media (max-width:1180px){.hint{display:none}}
+</style>
+</head>
+<body>
+
+<div id="screen">
+  <div id="stage">
+    <div id="world">
+      <div class="wall"></div>
+      <div class="menubar">
+        <div style="display:flex;align-items:center"><b>minitify</b>
+          <nav><span>File</span><span>Edit</span><span>View</span><span>Window</span><span>Help</span></nav>
+        </div>
+        <span>Mon 9:41</span>
+      </div>
+
+      <!-- ── the shell it was launched from ── -->
+      <div id="term">
+        <div class="term-bar"><i></i><i></i><i></i><span>~/projects — zsh</span></div>
+        <pre class="term-body"><span class="term-cmd">❯ <span id="termCmd"></span><span class="caret" id="termCaret1"></span></span><span class="term-banner" id="termBanner"></span><span class="term-word" id="termWord">minitify</span><span class="term-load"><b class="term-eq" id="termEq"></b> <span id="termStep"></span><span class="caret" id="termCaret2"></span></span></pre>
+      </div>
+
+      <!-- ── the floating panel ── -->
+      <div id="panel">
+        <!-- launch face -->
+        <div class="face" id="cardFace">
+          <div id="cardLogo"></div>
+          <div class="status">
+            <span class="stage-label" id="cardStage">Fetching your library</span>
+            <span class="stage-track" id="cardTrack">Instant Crush · Daft Punk</span>
+          </div>
+        </div>
+        <!-- player face -->
+        <div class="face" id="playerFace">
+          <div class="lay" id="strip"></div>
+          <img class="lay art" id="pArt" src="assets/album.svg" width="640" height="640"
+               alt="Random Access Memories album artwork">
+          <div class="lay" id="pMeta">
+            <span class="title" id="pTitle">Instant Crush</span>
+            <span class="artist" id="pArtist">Daft Punk</span>
+          </div>
+          <div class="lay seek" id="pSeek">
+            <span id="pElapsed">1:24</span>
+            <span class="rail"><i id="pFill"></i></span>
+            <span class="t2" id="pTotal">5:37</span>
+          </div>
+          <div class="lay row-h" id="pTransport">
+            <div class="btn" id="prevBtn"><span class="icon" id="prevIcon"
+              style="--symbol:url('assets/backward.fill.png')"></span></div>
+            <div class="btn" id="playBtn"><span class="sym" id="playSym">
+              <span class="icon" id="iconPause" style="--symbol:url('assets/pause.fill.png')"></span>
+              <span class="icon" id="iconPlay" style="--symbol:url('assets/play.fill.png')"></span>
+            </span></div>
+            <div class="btn" id="nextBtn"><span class="icon" id="nextIcon"
+              style="--symbol:url('assets/forward.fill.png')"></span></div>
+          </div>
+          <div class="lay row-h" id="pModes">
+            <div id="modesGroup" class="row-h" style="gap:8px">
+              <div class="btn" id="shuffleBtn" style="width:24px;height:24px">
+                <span class="icon" id="shuffleIcon" style="--symbol:url('assets/shuffle.png');width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px"></span></div>
+              <div class="btn" id="repeatBtn" style="width:24px;height:24px">
+                <span class="icon" id="repeatIcon" style="--symbol:url('assets/repeat.png');width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px"></span></div>
+            </div>
+          </div>
+          <div class="lay row-h" id="pExtras" style="gap:8px">
+            <div class="btn" id="heartBtn" style="width:24px;height:24px"><span class="sym" id="heartSym" style="width:24px;height:24px">
+              <span class="icon" id="iconHeart" style="--symbol:url('assets/heart.png');width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px"></span>
+              <span class="icon" id="iconHeartFill" style="--symbol:url('assets/heart.fill.png');width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px"></span>
+            </span></div>
+            <div class="btn" style="width:24px;height:24px;color:var(--secondary)">
+              <span class="icon" style="--symbol:url('assets/hifispeaker.png');width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px"></span></div>
+            <div class="row-h" style="gap:4px;width:88px;color:var(--secondary)">
+              <span class="icon" style="--symbol:url('assets/speaker.wave.2.fill.png');width:20px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px"></span>
+              <span class="rail" style="width:64px"><i style="width:65%"></i></span>
+            </div>
+          </div>
+          <div class="lay" id="queue">
+            <div class="q-head"><b>Up next</b><span>From Random Access Memories</span></div>
+            <div class="q-row" data-q><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="title">Lose Yourself to Dance</span><span class="artist">Daft Punk</span></div><span class="dur">5:53</span></div>
+            <div class="q-row" data-q><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="title">Giorgio by Moroder</span><span class="artist">Daft Punk</span></div><span class="dur">9:04</span></div>
+            <div class="q-row" data-q><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="title">Give Life Back to Music</span><span class="artist">Daft Punk</span></div><span class="dur">4:34</span></div>
+            <div class="q-row" data-q><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="title">Within</span><span class="artist">Daft Punk</span></div><span class="dur">3:48</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="orb" id="orbMode"><span class="icon" id="orbModeIcon"
+        style="--symbol:url('assets/arrow.up.left.and.arrow.down.right.png')"></span></div>
+      <div class="orb" id="orbLibrary"><span class="icon"
+        style="--symbol:url('assets/books.vertical.png')"></span></div>
+      <div class="orb" id="orbClose"><span class="icon"
+        style="--symbol:url('assets/xmark.png')"></span></div>
+
+      <!-- ── library window ── -->
+      <div id="library">
+        <div class="lib-top">
+          <div class="lib-brand"><div id="libLogo"></div><em>mini<i>tify</i></em></div>
+          <div class="search">
+            <span class="icon" style="--symbol:url('assets/magnifyingglass.png')"></span>
+            <span class="q" id="libQuery"></span><span class="ph" id="libPlaceholder">Search tracks or artists</span>
+            <span class="caret" id="libCaret" style="height:13px;margin-left:1px"></span>
+          </div>
+        </div>
+        <div class="lib-body">
+          <aside class="sidebar">
+            <div class="sb"><span class="liked"><span class="icon" style="--symbol:url('assets/heart.fill.png')"></span></span><span><b>Liked Songs</b><small>3 saved tracks</small></span></div>
+            <div class="divider"></div>
+            <h3>YOUR PLAYLISTS</h3>
+            <div class="sb"><img src="assets/album.svg" width="640" height="640" alt=""><span><b>Evening rotation</b><small>3 tracks</small></span></div>
+            <div class="sb"><img src="assets/album.svg" width="640" height="640" alt=""><span><b>Deep focus</b><small>3 tracks</small></span></div>
+            <div class="sb on"><img src="assets/album.svg" width="640" height="640" alt=""><span><b>On repeat</b><small>6 tracks</small></span></div>
+          </aside>
+          <div class="pane">
+            <div class="coll">
+              <img src="assets/album.svg" width="640" height="640" alt="Random Access Memories collection artwork">
+              <div>
+                <div class="kicker">YOUR PLAYLIST</div>
+                <h2>On repeat</h2>
+                <p>6 tracks · 34 min 37 sec</p>
+              </div>
+            </div>
+            <div class="thead"><span></span><span>Title</span><span>Artist</span><span>Time</span><span></span></div>
+            <div class="scroll"><div class="list" id="libList"></div>
+              <p class="listend" id="libEnd">All 6 tracks shown · Hearts keep this collection yours.</p>
+            </div>
+            <div class="nowbar">
+              <img src="assets/album.svg" width="640" height="640" alt="">
+              <div><span class="k" id="nowKicker">NOW PLAYING</span>
+                <strong id="nowTitle">Instant Crush <small>· Daft Punk</small></strong></div>
+              <span class="eq" id="nowEq"><i></i><i></i><i></i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /#world -->
+  </div><!-- /#stage -->
+</div><!-- /#screen -->
+
+<div id="hud">
+  <button id="playpause" type="button" aria-label="Pause the film">Pause</button>
+  <div class="track-wrap">
+    <input id="scrub" type="range" min="0" max="899" step="1" value="0"
+           aria-label="Scrub the film" aria-valuetext="frame 0 of 900">
+    <div id="ticks"></div>
+  </div>
+  <div class="readout">
+    <span><b id="rFrame">000</b> / 900</span>
+    <span><b id="rTime">0.00</b> s</span>
+    <em id="rScene">01 · Terminal</em>
+  </div>
+  <button id="reduceBtn" type="button" aria-pressed="false">Reduce Motion</button>
+  <span class="hint">Space plays · ← → step one frame · ⇧← ⇧→ jump a beat</span>
+</div>
+
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   The whole film is render(frame). Nothing is stateful, nothing is
+   a CSS transition — seek anywhere and the picture is correct.
+   Every duration and curve below is quoted from motion.html; the
+   only film-level values are the camera moves, marked CAMERA.
+   ══════════════════════════════════════════════════════════════════ */
+(() => {
+'use strict';
+const $ = s => document.getElementById(s);
+const root = document.documentElement;
+
+const FPS = 30, FRAMES = 900, SPAN = FRAMES / FPS * 1000;   // 30 s
+
+/* ── the five curves, from motion.html ─────────────────────────── */
+function bez(x1, y1, x2, y2){
+  const cx = 3*x1, bx = 3*(x2-x1)-cx, ax = 1-cx-bx;
+  const cy = 3*y1, by = 3*(y2-y1)-cy, ay = 1-cy-by;
+  const fx = t => ((ax*t+bx)*t+cx)*t, dx = t => (3*ax*t+2*bx)*t+cx;
+  return p => {
+    if (p <= 0) return 0; if (p >= 1) return 1;
+    let t = p;
+    for (let i = 0; i < 8; i++){
+      const e = fx(t) - p; if (Math.abs(e) < 1e-6) break;
+      const d = dx(t);     if (Math.abs(d) < 1e-6) break;
+      t -= e / d;
+    }
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+const E = {
+  lin:    p => p,
+  enter:  bez(0, 0, .2, 1),        // --e-out
+  exit:   bez(.4, 0, 1, 1),        // --e-in
+  std:    bez(.4, 0, .2, 1),       // --e-standard
+  panel:  bez(.32, .72, 0, 1),     // --e-panel
+  spring: bez(.22, 1.1, .36, 1),   // --e-spring
+  over:   bez(.2, 1.22, .4, 1),    // --e-overshoot (the mark landing on the M)
+  repIn:  bez(.2, 1.1, .4, 1),     // the .replace glyph arriving
+  eio:    bez(.42, 0, .58, 1),     // ease-in-out
+  h1: bez(.5, 0, .2, 1), h2: bez(.55, 0, .25, 1), h3: bez(.4, 0, .18, 1)
+};
+
+/* ── the durations, from motion.html ───────────────────────────── */
+const D = {
+  reveal:160, tint:180, press:120,
+  repOut:150, repIn:175, repLag:75, replace:250,
+  bounce:220, grab:120, release:160,
+  popIn:200, popOut:150,
+  mode:280, queue:280, row:180, secondary:90, qDelay:[120, 160, 200, 240],
+  winIn:240, winOut:180,
+  filter:150, reflow:200, clamp:380,
+  eq:1100, logo:3600, card:240, stage:900, print:90, frame:100, caret:1060
+};
+
+const cl01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const seg  = (T, t0, dur, e) => (e || E.lin)(cl01((T - t0) / dur));
+const bl   = (mp, a, b, c) => mp <= 1 ? lerp(a, b, mp) : lerp(b, c === undefined ? b : c, mp - 1);
+const px   = n => n.toFixed(2) + 'px';
+const mix  = (a, b, t) => 'rgb(' + a.map((v, i) => Math.round(lerp(v, b[i], t))).join(',') + ')';
+const SECONDARY = [180, 190, 197], ACTIVE = [156, 232, 181], LABEL = [242, 243, 245];
+
+/* ── the mark, frozen from the logo lab ────────────────────────── */
+const LOGO = {n:5, w:7, gap:4, r:95, hMax:40, hMin:6, vee:60, counter:45};
+const lgNoise = (i, k) => {const s = Math.sin((i+1)*12.9898 + k*78.233) * 43758.5453; return s - Math.floor(s);};
+const lgStep = t => 1 - (0.55*t + 0.45*(Math.round(t*2)/2));
+function lgFrac(beat, i, k){
+  const t = i / (LOGO.n - 1);
+  if (beat === 'play') return (LOGO.hMin + (LOGO.hMax-LOGO.hMin)*lgStep(t)) / LOGO.hMax;
+  if (beat === 'eq')   return (LOGO.hMin + (LOGO.hMax-LOGO.hMin)*lgNoise(i,k)) / LOGO.hMax;
+  const mid = (LOGO.n-1)/2;
+  if (i === 0 || i === LOGO.n-1) return 1;
+  const d = Math.min(i, LOGO.n-1-i), ramp = mid > 1 ? (d-1)/(mid-1) : 1;
+  return (LOGO.counter + (LOGO.vee-LOGO.counter)*ramp) / 100;
+}
+function lgGeom(beat, i, k){
+  const h = lgFrac(beat, i, k) * LOGO.hMax;
+  return {h, y: beat === 'm' ? 32 - LOGO.hMax/2 : 32 - h/2};
+}
+const lgX = i => (64 - (LOGO.n*LOGO.w + (LOGO.n-1)*LOGO.gap))/2 + i*(LOGO.w + LOGO.gap);
+const LG = [
+  {b:'eq',   k:0, at:0.00, e:E.eio}, {b:'eq', k:1, at:0.07, e:E.eio},
+  {b:'eq',   k:2, at:0.14, e:E.eio}, {b:'eq', k:3, at:0.21, e:E.h1},
+  {b:'play', k:0, at:0.36, e:E.lin}, {b:'play', k:0, at:0.46, e:E.h2},
+  {b:'eq',   k:5, at:0.58, e:E.eio}, {b:'eq', k:6, at:0.65, e:E.eio},
+  {b:'eq',   k:7, at:0.73, e:E.h3},  {b:'m',  k:0, at:0.91, e:E.over},
+  {b:'m',    k:0, at:1.00}
+];
+function logoSvg(size){
+  const rx = (LOGO.w/2 * LOGO.r/100).toFixed(2);
+  let r = '';
+  for (let i = 0; i < LOGO.n; i++){
+    const g = lgGeom('m', i, 0);
+    r += '<rect x="' + lgX(i).toFixed(2) + '" y="' + g.y.toFixed(2) + '" width="' + LOGO.w +
+         '" height="' + g.h.toFixed(2) + '" rx="' + rx + '" data-i="' + i + '"/>';
+  }
+  return '<svg class="logo" width="' + size + '" height="' + size +
+         '" viewBox="0 0 64 64" role="img" aria-label="minitify">' + r + '</svg>';
+}
+function logoBars(localMs, still){
+  if (still) return [0,1,2,3,4].map(i => lgGeom('m', i, 0));
+  const p = cl01(localMs / D.logo);
+  let i = 0; while (i < LG.length - 2 && p > LG[i+1].at) i++;
+  const a = LG[i], b = LG[i+1];
+  const k = (a.e || E.lin)(cl01((p - a.at) / ((b.at - a.at) || 1)));
+  return [0,1,2,3,4].map(j => {
+    const ga = lgGeom(a.b, j, a.k), gb = lgGeom(b.b, j, b.k);
+    return {h: lerp(ga.h, gb.h, k), y: lerp(ga.y, gb.y, k)};
+  });
+}
+
+/* ── the same mark, quantised for the shell ────────────────────── */
+const BLOCKS = ' ▁▂▃▄▅▆▇█';
+const lgCell = f => BLOCKS[Math.min(8, Math.max(1, Math.round(f * 8)))];
+const lgLine = (beat, k) => [0,1,2,3,4].map(i => lgCell(lgFrac(beat, i, k))).join(' ');
+const EQ_FRAMES = [0,1,2,3,4,5,6,7].map(k => lgLine('eq', k));
+const EQ_SETTLED = lgLine('play', 0);
+const BANNER = [0,1,2,3].map(r => [0,1,2,3,4].map(i => lgFrac('m', i, 0) > r/4 ? '█' : ' ').join(' '));
+
+/* ── real content ──────────────────────────────────────────────── */
+const TRACKS = [
+  {t:'Instant Crush',           a:'Daft Punk', s:337, liked:true},
+  {t:'Lose Yourself to Dance',  a:'Daft Punk', s:353, liked:false},
+  {t:'Giorgio by Moroder',      a:'Daft Punk', s:544, liked:true},
+  {t:'Give Life Back to Music', a:'Daft Punk', s:274, liked:false},
+  {t:'Within',                  a:'Daft Punk', s:228, liked:true},
+  {t:'Motherboard',             a:'Daft Punk', s:341, liked:false}
+];
+const HERO = 0, PICKED = 4;                    // Instant Crush → Within
+const clock = n => Math.floor(n/60) + ':' + String(Math.floor(n)%60).padStart(2,'0');
+const STEPS = ['Connecting to Spotify', 'Waking the player', 'Fetching your library', 'Ready'];
+const CMD = 'minitify play';
+const QUERY = 'within';
+
+/* ── the score, in milliseconds ────────────────────────────────── */
+const t = {
+  typeFrom:600, typeStep:100, enter:1900,
+  banner:2200, bannerStep:90, word:2600, load:2600,
+  stage1:2600, stage2:3500, stage3:4400,
+  cardIn:6500, logoIn:6620, logoRun:6740, ready:7640, trackLine:7940,
+  becomePanel:10340, panelFace:10440,
+  orbReveal:11800, toNormal:12400,
+  pause:15200, resume:15900, shuffle:16400, repeat:16900, like:17400,
+  toExtended:19600,
+  libOpen:22200, libType:22800, libTypeStep:110,
+  filterOut:22800, select:23600, start:24100, filterIn:24800, libClose:26300,
+  lift:26800, dragFrom:26920, dragTo:27700, clamped:28080, toMini:28400,
+  dissolve:29600
+};
+const SCENES = [
+  {t:0,     n:'01 · Terminal'},       {t:6500,  n:'02 · The panel arrives'},
+  {t:11500, n:'03 · Mini → Normal'},  {t:15000, n:'04 · Playing'},
+  {t:19000, n:'05 · Queue'},          {t:22000, n:'06 · Library'},
+  {t:26500, n:'07 · Drag, and rest'}
+];
+/* every beat worth parking on — also the hold points under Reduce Motion */
+const KEYS = [0, t.typeFrom, t.enter, t.banner, t.word, t.stage2, t.stage3, 5300,
+  t.cardIn, t.logoRun, t.ready, t.becomePanel, t.panelFace + 300, t.orbReveal,
+  t.toNormal, t.toNormal + D.mode, 13600, t.pause, t.resume, t.shuffle, t.repeat,
+  t.like, 18200, t.toExtended, t.toExtended + D.mode, 20100, t.libOpen,
+  t.libOpen + D.winIn, t.libType, 23100, t.select, t.start, 24500, t.filterIn,
+  25100, t.libClose, t.lift, 27300, t.dragTo, t.clamped, t.toMini,
+  t.toMini + D.mode, t.dissolve, SPAN];
+
+/* ── CAMERA · film-level, not from motion.html (curves still are) ── */
+const CAM = [
+  {t:0,     cx:960, cy:540, s:1.00},
+  {t:1200,  cx:960, cy:540, s:1.00, e:E.panel},
+  {t:2100,  cx:640, cy:408, s:1.50, e:E.panel},
+  {t:6100,  cx:640, cy:408, s:1.50, e:E.panel},
+  {t:7000,  cx:780, cy:630, s:1.90, e:E.panel},
+  {t:11300, cx:780, cy:630, s:1.90, e:E.panel},
+  {t:12000, cx:840, cy:694, s:1.90, e:E.panel},
+  {t:18800, cx:840, cy:694, s:1.90, e:E.panel},
+  {t:19400, cx:840, cy:680, s:1.35, e:E.panel},
+  {t:21700, cx:840, cy:680, s:1.35, e:E.panel},
+  {t:22400, cx:960, cy:550, s:1.20, e:E.panel},
+  {t:26200, cx:960, cy:550, s:1.20, e:E.panel},
+  {t:26900, cx:960, cy:540, s:1.00, e:E.panel},
+  {t:SPAN,  cx:960, cy:540, s:1.00}
+];
+function camera(T){
+  let i = 0; while (i < CAM.length - 2 && T >= CAM[i+1].t) i++;
+  const a = CAM[i], b = CAM[i+1];
+  const k = (b.e || E.lin)(cl01((T - a.t) / ((b.t - a.t) || 1)));
+  return {cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), s: lerp(a.s, b.s, k)};
+}
+
+/* ── panel geometry ────────────────────────────────────────────── */
+const HOME_X = 620, HOME_Y = 600;
+const CARD = {x:660, y:532, w:240, h:196};
+const OFF_X = 1720, CLAMP_X = 1440;            // thrown past the edge, then clamped back
+function panelX(T){
+  if (T < t.dragFrom) return HOME_X;
+  if (T < t.dragTo)   return lerp(HOME_X, OFF_X, cl01((T - t.dragFrom) / (t.dragTo - t.dragFrom)));
+  return lerp(OFF_X, CLAMP_X, seg(T, t.dragTo, D.clamp, E.spring));
+}
+/* 0 = mini, 1 = normal, 2 = extended — one scalar, so every layer
+   interpolates along the same path the window does */
+function modePos(T){
+  if (T < t.toNormal) return 0;
+  if (T < t.toNormal + D.mode) return seg(T, t.toNormal, D.mode, E.panel);
+  if (T < t.toExtended) return 1;
+  if (T < t.toExtended + D.mode) return 1 + seg(T, t.toExtended, D.mode, E.panel);
+  if (T < t.toMini) return 2;
+  if (T < t.toMini + D.mode) return 2 - 2 * seg(T, t.toMini, D.mode, E.panel);
+  return 0;
+}
+function panelBox(T){
+  const mp = modePos(T);
+  const w = bl(mp, 320, 440, 440), h = bl(mp, 60, 188, 412);
+  if (T < t.becomePanel) return {x:CARD.x, y:CARD.y, w:CARD.w, h:CARD.h, mp:0, card:1};
+  if (T < t.becomePanel + D.mode){
+    const k = seg(T, t.becomePanel, D.mode, E.panel);
+    return {x:lerp(CARD.x, HOME_X, k), y:lerp(CARD.y, HOME_Y, k),
+            w:lerp(CARD.w, 320, k), h:lerp(CARD.h, 60, k), mp:0, card:1 - k};
+  }
+  return {x:panelX(T), y:HOME_Y, w, h, mp, card:0};
+}
+
+/* ── SF Symbols stand-ins, on motion.html's clocks ─────────────── */
+function replacePair(T, t0){
+  const a = seg(T, t0, D.repOut, E.exit);
+  const b = seg(T, t0 + D.repLag, D.repIn, E.enter);
+  const bs = seg(T, t0 + D.repLag, D.repIn, E.repIn);
+  return {oldOp:1 - a, oldSc:lerp(1, .55, a), newOp:b, newSc:lerp(.55, 1, bs)};
+}
+function bounceAt(T, t0, axis, peak){
+  const p = cl01((T - t0) / D.bounce);
+  if (p <= 0 || p >= 1) return 'none';
+  const k = p < .38 ? E.std(p / .38) : 1 - E.std((p - .38) / .62);
+  const s = 1 + (peak - 1) * k;
+  if (axis === 'x+') return 'translateX(' + (3*k).toFixed(2) + 'px) scale(' + s.toFixed(3) + ')';
+  if (axis === 'x-') return 'translateX(' + (-3*k).toFixed(2) + 'px) scale(' + s.toFixed(3) + ')';
+  return 'translateY(' + (-2.5*k).toFixed(2) + 'px) scale(' + s.toFixed(3) + ')';
+}
+function eqHeight(T, i, still){
+  if (still) return [7, 12, 9][i];   // the marker the shipping library draws
+  const per = [D.eq, D.eq * .78, D.eq * .92][i];
+  const p = (T % per) / per;
+  const K = [[[0,5],[.30,13],[.62,7],[1,5]],
+             [[0,12],[.26,4],[.58,14],[1,12]],
+             [[0,9],[.40,14],[.72,5],[1,9]]][i];
+  for (let j = 0; j < K.length - 1; j++)
+    if (p <= K[j+1][0]) return lerp(K[j][1], K[j+1][1], E.std((p - K[j][0]) / (K[j+1][0] - K[j][0])));
+  return K[0][1];
+}
+/* the one thing that is genuinely time-based rather than eased */
+const blink = (T, still) => still ? 1 : ((T % D.caret) < D.caret/2 ? 1 : 0);
+
+/* ── elapsed, counted not animated ─────────────────────────────── */
+function elapsed(T){
+  if (T >= t.start) return (T - t.start) / 1000;                       // Within, restarted
+  if (T < t.becomePanel + D.mode) return 84;
+  if (T < t.pause)  return 84 + (T - t.becomePanel - D.mode) / 1000;
+  const atPause = 84 + (t.pause - t.becomePanel - D.mode) / 1000;
+  if (T < t.resume) return atPause;
+  return atPause + (T - t.resume) / 1000;
+}
+
+/* ── build the two logos and the library rows once ─────────────── */
+$('cardLogo').innerHTML = logoSvg(76);
+$('libLogo').innerHTML  = logoSvg(22);
+const cardBars = [...$('cardLogo').querySelectorAll('rect')];
+
+$('libList').innerHTML = TRACKS.map((tr, i) =>
+  '<div class="lrow" data-row="' + i + '">' +
+    '<span class="art-cell"><img src="assets/album.svg" width="640" height="640" alt="">' +
+      '<span class="eq" data-eq><i></i><i></i><i></i></span></span>' +
+    '<span class="rt">' + tr.t + '</span>' +
+    '<span class="artist">' + tr.a + '</span>' +
+    '<span class="dur">' + clock(tr.s) + '</span>' +
+    '<span class="heart' + (tr.liked ? ' on' : '') + '"><span class="icon" style="--symbol:url(\'assets/' +
+      (tr.liked ? 'heart.fill' : 'heart') + '.png\')"></span></span>' +
+  '</div>').join('');
+const libRows = [...document.querySelectorAll('#libList .lrow')];
+const qRows   = [...document.querySelectorAll('#queue [data-q]')];
+
+/* ══════════════════════════════════════════════════════════════════
+   render
+   ══════════════════════════════════════════════════════════════════ */
+function render(frame){
+  const still = root.dataset.reduce === 'on';
+  let T = frame / FPS * 1000;
+  if (still){ let k = 0; for (const key of KEYS) if (T >= key) k = key; T = k; }
+
+  const diss = seg(T, t.dissolve, SPAN - t.dissolve, E.std);   // the loop seam
+  const live = 1 - diss;
+
+  /* ── camera ── */
+  const c = camera(T);
+  $('world').style.transform =
+    'translate(' + px(960 - c.cx*c.s) + ',' + px(540 - c.cy*c.s) + ') scale(' + c.s.toFixed(4) + ')';
+
+  /* ── terminal ── */
+  const typed = Math.max(0, Math.min(CMD.length, Math.floor((T - t.typeFrom) / t.typeStep)));
+  $('termCmd').textContent = CMD.slice(0, typed);
+  $('termCmd').style.opacity = (T < t.dissolve ? 1 : live);
+  $('termCaret1').style.opacity = blink(T, still) * (T < t.enter ? 1 : diss);
+
+  let banner = '';
+  for (let r = 0; r < 4; r++)
+    banner += '<span style="opacity:' + (T >= t.banner + r*t.bannerStep ? live : 0) + '">' + BANNER[r] + '</span>';
+  $('termBanner').innerHTML = banner;
+
+  const wp = seg(T, t.word, 220, E.enter);
+  $('termWord').style.opacity = wp * live;
+  $('termWord').style.letterSpacing = lerp(.5, .34, wp).toFixed(3) + 'em';
+
+  const loadOn = T >= t.load;
+  const lf = Math.floor((T - t.load) / D.frame);
+  $('termEq').textContent = !loadOn ? '' : (still || lf >= 30 ? EQ_SETTLED : EQ_FRAMES[lf % 8]);
+  const stepIdx = T >= t.ready ? 3 : T >= t.stage3 ? 2 : T >= t.stage2 ? 1 : 0;
+  $('termStep').textContent = loadOn ? STEPS[stepIdx] + (stepIdx === 3 ? '' : '…') : '';
+  $('termCaret2').style.opacity = loadOn ? blink(T, still) * live : 0;
+  $('term').style.opacity = 1;
+
+  /* ── the panel box ── */
+  const b = panelBox(T);
+  const panel = $('panel');
+  const inP = seg(T, t.cardIn, D.card, E.enter);
+  const liftS = T < t.lift ? 1
+    : T < t.dragTo ? lerp(1, 1.015, seg(T, t.lift, D.grab, E.enter))
+    : lerp(1.015, 1, seg(T, t.dragTo, D.release, E.spring));
+  const liftK = (liftS - 1) / 0.015;
+  panel.style.opacity = (T < t.cardIn ? 0 : inP) * live;
+  panel.style.left = px(b.x); panel.style.top = px(b.y);
+  panel.style.width = px(b.w); panel.style.height = px(b.h);
+  panel.style.borderRadius = '16px';
+  panel.style.transform = 'translateY(' + px(lerp(6, 0, seg(T, t.cardIn, D.card, E.panel))) +
+    ') scale(' + (lerp(.96, 1, seg(T, t.cardIn, D.card, E.panel)) * liftS).toFixed(4) + ')';
+  panel.style.boxShadow = '0 ' + px(lerp(14, 22, liftK)) + ' ' + px(lerp(32, 48, liftK)) +
+    ' rgba(0,0,0,' + lerp(.33, .45, liftK).toFixed(3) + '), inset 0 0 0 .5px rgba(255,255,255,' +
+    lerp(.23, .30, liftK).toFixed(3) + ')';
+
+  /* ── launch face ── */
+  $('cardFace').style.opacity = b.card;
+  $('cardFace').style.display = b.card > 0.001 ? '' : 'none';
+  if (b.card > 0.001){
+    const bars = logoBars(T - t.logoRun, still);
+    cardBars.forEach((el, i) => { el.setAttribute('y', bars[i].y.toFixed(2));
+                                  el.setAttribute('height', bars[i].h.toFixed(2)); });
+    $('cardLogo').style.opacity = seg(T, t.logoIn, D.card, E.enter);
+    $('cardStage').textContent = T >= t.ready ? STEPS[3] : STEPS[2];
+    $('cardTrack').style.opacity = seg(T, t.trackLine, D.card, E.enter);
+  }
+
+  /* ── player face ── */
+  const face = seg(T, t.panelFace, D.card, E.enter);
+  const pf = $('playerFace');
+  pf.style.opacity = face;
+  pf.style.display = face > 0.001 ? '' : 'none';
+  const mp = b.mp;
+
+  /* secondary controls arrive 90 ms late, and leave without the delay */
+  const sec = T < t.toNormal + D.secondary ? 0
+    : T < t.toNormal + D.secondary + D.mode ? seg(T, t.toNormal + D.secondary, D.mode, E.enter)
+    : T < t.toMini ? 1
+    : 1 - seg(T, t.toMini, D.mode, E.enter);
+
+  if (face > 0.001){
+    /* artwork — one view, one path */
+    const a = $('pArt');
+    a.style.left = px(bl(mp, 10, 20)); a.style.top = px(bl(mp, 10, 12));
+    a.style.width = a.style.height = px(bl(mp, 40, 88));
+    a.style.borderRadius = px(bl(mp, 6, 8));
+    a.style.opacity = seg(T, t.becomePanel, D.card, E.enter);
+
+    /* title and artist travel with it */
+    const m = $('pMeta');
+    m.style.left = px(bl(mp, 60, 124)); m.style.top = px(bl(mp, 14, 18));
+    m.style.width = px(bl(mp, 190, 296));
+    const ti = $('pTitle'), ar = $('pArtist');
+    ti.style.fontSize = px(bl(mp, 13, 24));
+    ti.style.lineHeight = bl(mp, 1.3, 1.2).toFixed(3);
+    ti.style.letterSpacing = bl(mp, 0, -.015).toFixed(4) + 'em';
+    ar.style.fontSize = px(bl(mp, 11, 13));
+    ar.style.lineHeight = bl(mp, 1.3, 1.5).toFixed(3);
+    ar.style.letterSpacing = '.01em';
+
+    /* the library start moves the track — crossfade, replace-shaped */
+    const sw = cl01((T - t.start) / D.replace);
+    const now = T >= t.start + D.replace/2 ? PICKED : HERO;
+    ti.textContent = TRACKS[now].t; ar.textContent = TRACKS[now].a;
+    const metaOp = (T >= t.start && sw < 1)
+      ? (sw < .5 ? 1 - E.exit(sw/.5) : E.enter((sw - .5)/.5)) : 1;
+    m.style.opacity = metaOp;
+
+    /* seek */
+    const sk = $('pSeek');
+    sk.style.left = px(bl(mp, 124, 124)); sk.style.top = px(bl(mp, 62, 71));
+    sk.style.width = px(296); sk.style.opacity = sec;
+    const el = Math.min(elapsed(T), TRACKS[now].s);
+    $('pElapsed').textContent = clock(el);
+    $('pTotal').textContent = clock(TRACKS[now].s);
+    $('pFill').style.width = (el / TRACKS[now].s * 100).toFixed(2) + '%';
+
+    /* darker strip under the transport */
+    const st = $('strip');
+    st.style.left = '0px'; st.style.top = px(bl(mp, 60, 112));
+    st.style.width = px(bl(mp, 320, 440)); st.style.height = px(bl(mp, 0, 76));
+    st.style.opacity = Math.min(1, mp);
+    st.style.borderRadius = '0 0 ' + px(bl(mp, 16, 16, 0)) + ' ' + px(bl(mp, 16, 16, 0));
+
+    /* transport — the same three buttons, moved */
+    const tr = $('pTransport');
+    tr.style.left = px(bl(mp, 206, 20)); tr.style.top = px(bl(mp, 14, 126));
+    tr.style.gap = px(bl(mp, 4, 8));
+    const ps = bl(mp, 32, 48);
+    const pb = $('playBtn');
+    pb.style.width = pb.style.height = px(ps);
+    pb.style.borderRadius = px(bl(mp, 6, 24));
+    pb.style.background = 'rgba(' + [lerp(255,135,Math.min(1,mp)), lerp(255,230,Math.min(1,mp)),
+      lerp(255,166,Math.min(1,mp))].map(Math.round).join(',') + ',' + lerp(.11,1,Math.min(1,mp)).toFixed(3) + ')';
+    pb.style.color = mix(LABEL, [16,39,26], Math.min(1, mp));
+    $('playSym').style.width = $('playSym').style.height = px(ps);
+    [$('iconPause'), $('iconPlay')].forEach(ic => {
+      ic.style.width = ic.style.height = '32px';
+      ic.style.maskSize = ic.style.webkitMaskSize = px(bl(mp, 32, 44)) + ' ' + px(bl(mp, 32, 44));
+    });
+    [$('prevBtn'), $('nextBtn')].forEach(x => { x.style.width = x.style.height = '32px'; });
+    [$('prevIcon'), $('nextIcon')].forEach(x => { x.style.width = x.style.height = '32px';
+      x.style.maskSize = x.style.webkitMaskSize = '32px 32px'; });
+
+    /* play ↔ pause · .replace */
+    let playing = true, lastSwap = -1e9;
+    if (T >= t.pause)  { playing = false; lastSwap = t.pause; }
+    if (T >= t.resume) { playing = true;  lastSwap = t.resume; }
+    const rp = replacePair(T, lastSwap);
+    const showPause = playing, inAnim = (T - lastSwap) < D.replace;
+    const pauseIc = $('iconPause'), playIc = $('iconPlay');
+    if (!inAnim){
+      pauseIc.style.opacity = showPause ? 1 : 0; pauseIc.style.transform = 'scale(1)';
+      playIc.style.opacity  = showPause ? 0 : 1; playIc.style.transform  = 'scale(1)';
+    } else {
+      const incoming = showPause ? pauseIc : playIc, outgoing = showPause ? playIc : pauseIc;
+      incoming.style.opacity = rp.newOp; incoming.style.transform = 'scale(' + rp.newSc.toFixed(3) + ')';
+      outgoing.style.opacity = rp.oldOp; outgoing.style.transform = 'scale(' + rp.oldSc.toFixed(3) + ')';
+    }
+
+    /* shuffle · repeat — bounce on enable, colour is the state */
+    const md = $('pModes');
+    md.style.left = px(bl(mp, 172, 172)); md.style.top = px(bl(mp, 150, 138));
+    md.style.opacity = sec;
+    $('shuffleIcon').style.color = mix(SECONDARY, ACTIVE, seg(T, t.shuffle, D.tint, E.enter));
+    $('shuffleBtn').style.color = $('shuffleIcon').style.color;
+    $('shuffleIcon').style.transform = bounceAt(T, t.shuffle, 'y', 1.14);
+    $('repeatBtn').style.color = mix(SECONDARY, ACTIVE, seg(T, t.repeat, D.tint, E.enter));
+    $('repeatIcon').style.transform = bounceAt(T, t.repeat, 'y', 1.14);
+
+    /* like — replace, tint, and the bounce riding on the arriving glyph */
+    const ex = $('pExtras');
+    ex.style.left = px(bl(mp, 268, 268)); ex.style.top = px(bl(mp, 150, 138));
+    ex.style.opacity = sec;
+    const lr = replacePair(T, t.like), liked = T >= t.like, anim = (T - t.like) < D.replace && liked;
+    const hOut = $('iconHeart'), hIn = $('iconHeartFill');
+    if (!liked){ hOut.style.opacity = 1; hOut.style.transform = 'scale(1)'; hIn.style.opacity = 0; }
+    else if (anim){
+      hIn.style.opacity = lr.newOp;  hIn.style.transform  = 'scale(' + lr.newSc.toFixed(3) + ')';
+      hOut.style.opacity = lr.oldOp; hOut.style.transform = 'scale(' + lr.oldSc.toFixed(3) + ')';
+    } else { hIn.style.opacity = 1; hIn.style.transform = 'scale(1)'; hOut.style.opacity = 0; }
+    $('heartBtn').style.color = mix(SECONDARY, ACTIVE, seg(T, t.like, D.tint, E.enter));
+    $('heartSym').style.transform = bounceAt(T, t.like + D.repLag, 'y', 1.14);
+
+    /* queue — the window grows around it, then the rows arrive */
+    const q = $('queue');
+    q.style.left = '0px'; q.style.top = px(188); q.style.width = px(440);
+    q.style.height = px(bl(mp, 0, 0, 224));
+    q.style.opacity = mp > 1 ? 1 : 0;
+    qRows.forEach((r, i) => {
+      const inOp = seg(T, t.toExtended + D.qDelay[i], D.row, E.enter);
+      const outOp = 1 - seg(T, t.toMini, D.mode, E.enter);
+      r.style.opacity = Math.min(inOp, outOp);
+      r.style.transform = 'translateY(' + px(lerp(8, 0, inOp)) + ')';
+    });
+  }
+
+  /* ── the detached circles ── */
+  let orbOn = 0, orbT = 0, orbUp = true;
+  if (T >= t.orbReveal){ orbOn = 1; orbT = t.orbReveal; orbUp = true; }
+  if (T >= t.libOpen - 100){ orbT = t.libOpen - 100; orbUp = false; }
+  if (T >= t.libClose + D.winOut){ orbT = t.libClose + D.winOut; orbUp = true; }
+  const op = orbOn ? (orbUp ? seg(T, orbT, D.reveal, E.enter) : 1 - seg(T, orbT, D.reveal, E.exit)) : 0;
+  const orbVis = op * live * (b.card < .5 ? 1 : 0);
+  /* the side is decided by which half of the screen the panel sits in */
+  const cxp = b.x + b.w/2, leftHalf = cxp < 960;
+  const mo = $('orbMode');
+  mo.style.opacity = orbVis;
+  mo.style.left = px(leftHalf ? b.x + b.w + 8 : b.x - 36);
+  mo.style.top  = px(b.y + (mp < .5 ? 16 : 52));
+  /* the glyph flips to the collapse arrows while extended */
+  const swapT = T >= t.toMini ? t.toMini : t.toExtended;
+  const showCollapse = T >= t.toExtended && T < t.toMini;
+  const d1 = seg(T, swapT, 125, E.exit), d2 = seg(T, swapT + 125, 125, E.enter);
+  const mid = T < swapT + 125;
+  const glyph = (T >= swapT)
+    ? (mid ? (showCollapse ? 'arrow.up.left.and.arrow.down.right' : 'arrow.down.right.and.arrow.up.left')
+           : (showCollapse ? 'arrow.down.right.and.arrow.up.left' : 'arrow.up.left.and.arrow.down.right'))
+    : 'arrow.up.left.and.arrow.down.right';
+  const gi = $('orbModeIcon');
+  gi.style.setProperty('--symbol', "url('assets/" + glyph + ".png')");
+  if (T >= swapT && (T - swapT) < D.replace){
+    gi.style.opacity = mid ? 1 - d1 : d2;
+    gi.style.transform = 'scale(' + (mid ? lerp(1, .6, d1) : lerp(.6, 1, d2)).toFixed(3) + ')';
+  } else { gi.style.opacity = 1; gi.style.transform = 'scale(1)'; }
+  /* library and close sit on the side of the panel that has room */
+  const below = (b.y + b.h/2) < 540;
+  const wy = below ? b.y + b.h + 8 : b.y - 36;
+  [$('orbLibrary'), $('orbClose')].forEach((o, i) => {
+    o.style.opacity = orbVis * (mp < .5 ? 0 : 1);
+    o.style.left = px(b.x + b.w - 64 + i*36);
+    o.style.top = px(wy);
+  });
+
+  /* ── library window ── */
+  const lib = $('library');
+  const oIn = seg(T, t.libOpen, D.winIn, E.enter);
+  const oSc = seg(T, t.libOpen, D.winIn, E.panel);
+  const oOut = seg(T, t.libClose, D.winOut, E.exit);
+  const libOp = Math.max(0, oIn - oOut) * live;
+  lib.style.opacity = libOp;
+  lib.style.display = libOp > 0.001 ? '' : 'none';
+  if (libOp > 0.001){
+    const sc = T < t.libClose ? lerp(.94, 1, oSc) : lerp(1, .94, seg(T, t.libClose, D.winOut, E.exit));
+    lib.style.transform = 'scale(' + sc.toFixed(4) + ')';
+
+    /* typing in the search field */
+    const qn = Math.max(0, Math.min(QUERY.length, Math.floor((T - t.libType) / t.libTypeStep)));
+    const cleared = T >= t.filterIn;
+    const qtext = cleared ? '' : QUERY.slice(0, qn);
+    $('libQuery').textContent = qtext;
+    $('libPlaceholder').style.display = qtext ? 'none' : '';
+    $('libCaret').style.opacity = blink(T, still);
+
+    /* rows: fade out, then collapse — AppKit owns this reflow natively */
+    libRows.forEach((r, i) => {
+      let o = 1, h = 40, mb = 6;
+      if (i !== PICKED){
+        if (T >= t.filterIn){
+          o = seg(T, t.filterIn, D.filter, E.exit);
+          const k = seg(T, t.filterIn, D.reflow, E.panel);
+          h = lerp(0, 40, k); mb = lerp(0, 6, k);
+        } else if (T >= t.filterOut){
+          o = 1 - seg(T, t.filterOut, D.filter, E.exit);
+          const k = seg(T, t.filterOut, D.reflow, E.panel);
+          h = lerp(40, 0, k); mb = lerp(6, 0, k);
+        }
+      }
+      r.style.opacity = o; r.style.height = px(h); r.style.marginBottom = px(mb);
+      /* selection is navigation: the shortest change in the product */
+      const selected = i === PICKED && T >= t.select;
+      const sp = selected ? seg(T, t.select, D.press, E.enter) : 0;
+      r.style.background = 'rgba(255,255,255,' + lerp(.063, .11, sp).toFixed(3) + ')';
+      r.style.boxShadow = 'inset 0 0 0 ' + px(lerp(.5, 1, sp)) + ' rgba(255,255,255,' +
+        lerp(.133, .18, sp).toFixed(3) + ')';
+      /* starting it moves the green, and the badge, from one row to the other */
+      const green = i === HERO ? 1 - seg(T, t.start, D.tint, E.enter)
+                  : i === PICKED ? seg(T, t.start, D.tint, E.enter) : 0;
+      r.querySelector('.rt').style.color = mix(LABEL, ACTIVE, green);
+      const badge = r.querySelector('[data-eq]');
+      badge.style.opacity = green;
+      [...badge.children].forEach((bar, j) => { bar.style.height = px(eqHeight(T, j, still)); });
+    });
+    $('libEnd').textContent = qtext ? '1 matching track'
+      : 'All 6 tracks shown · Hearts keep this collection yours.';
+
+    /* the footer says what is actually playing */
+    const sw2 = cl01((T - t.start) / D.replace);
+    const nowI = T >= t.start + D.replace/2 ? PICKED : HERO;
+    $('nowTitle').innerHTML = TRACKS[nowI].t + ' <small>· ' + TRACKS[nowI].a + '</small>';
+    $('nowTitle').style.opacity = (T >= t.start && sw2 < 1)
+      ? (sw2 < .5 ? 1 - E.exit(sw2/.5) : E.enter((sw2 - .5)/.5)) : 1;
+    $('nowKicker').textContent = 'NOW PLAYING';
+    [...$('nowEq').children].forEach((bar, j) => { bar.style.height = px(eqHeight(T, j, still)); });
+  }
+
+  /* ── the readout ── */
+  let scene = SCENES[0]; for (const s of SCENES) if (T >= s.t) scene = s;
+  $('rFrame').textContent = String(frame).padStart(3, '0');
+  $('rTime').textContent = (frame / FPS).toFixed(2);
+  $('rScene').textContent = scene.n;
+  const sb = $('scrub');
+  if (+sb.value !== frame) sb.value = frame;
+  sb.setAttribute('aria-valuetext', 'frame ' + frame + ' of ' + FRAMES + ' — ' + scene.n);
+}
+
+/* ══ playback ═════════════════════════════════════════════════════ */
+let frame = 0, playing = true, last = 0, acc = 0;
+function tick(now){
+  if (playing){
+    if (!last) last = now;
+    acc += now - last; last = now;
+    const step = 1000 / FPS;
+    if (acc >= step){ frame = (frame + Math.floor(acc / step)) % FRAMES; acc %= step; render(frame); }
+  } else last = 0;
+  requestAnimationFrame(tick);
+}
+function setPlaying(v){
+  playing = v; last = 0; acc = 0;
+  const b = $('playpause');
+  b.textContent = v ? 'Pause' : 'Play';
+  b.setAttribute('aria-label', v ? 'Pause the film' : 'Play the film');
+}
+$('playpause').addEventListener('click', () => setPlaying(!playing));
+$('scrub').addEventListener('input', e => { setPlaying(false); frame = +e.target.value; render(frame); });
+
+const reduceBtn = $('reduceBtn'), mq = matchMedia('(prefers-reduced-motion: reduce)');
+function setReduce(on){
+  root.dataset.reduce = on ? 'on' : 'off';
+  reduceBtn.setAttribute('aria-pressed', String(on));
+  reduceBtn.textContent = on ? 'Reduce Motion · on' : 'Reduce Motion';
+  render(frame);
+}
+setReduce(mq.matches);
+mq.addEventListener('change', e => setReduce(e.matches));
+reduceBtn.addEventListener('click', () => setReduce(root.dataset.reduce !== 'on'));
+
+function jumpKey(dir){
+  const T = frame / FPS * 1000;
+  let target = dir > 0 ? KEYS.find(k => k > T + 1) : [...KEYS].reverse().find(k => k < T - 1);
+  if (target === undefined) target = dir > 0 ? 0 : SPAN - 1;
+  frame = Math.min(FRAMES - 1, Math.round(target / 1000 * FPS));
+  setPlaying(false); render(frame);
+}
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.key !== ' ') return;
+  if (e.code === 'Space'){ e.preventDefault(); setPlaying(!playing); return; }
+  if (e.key === 'ArrowRight'){ e.preventDefault();
+    if (e.shiftKey) return jumpKey(1);
+    setPlaying(false); frame = (frame + 1) % FRAMES; render(frame); }
+  if (e.key === 'ArrowLeft'){ e.preventDefault();
+    if (e.shiftKey) return jumpKey(-1);
+    setPlaying(false); frame = (frame + FRAMES - 1) % FRAMES; render(frame); }
+});
+
+/* scene marks on the scrubber, so a beat can be found without hunting */
+$('ticks').innerHTML = SCENES.map(s =>
+  '<i class="major" style="left:' + (s.t / SPAN * 100).toFixed(3) + '%"></i>').join('') +
+  KEYS.map(k => '<i style="left:' + (k / SPAN * 100).toFixed(3) + '%"></i>').join('');
+
+/* fit 1920 × 1080 into whatever window this is opened in */
+function fit(){
+  const el = $('screen'), s = Math.min(el.clientWidth / 1920, el.clientHeight / 1080);
+  const st = $('stage');
+  st.style.transform = 'scale(' + s + ')';
+  st.style.left = ((el.clientWidth  - 1920 * s) / 2) + 'px';
+  st.style.top  = ((el.clientHeight - 1080 * s) / 2) + 'px';
+}
+addEventListener('resize', fit); fit();
+
+/* ── the surface a Remotion composition would bind to ──────────── */
+window.minitifyFilm = {
+  fps: FPS, durationInFrames: FRAMES, width: 1920, height: 1080,
+  scenes: SCENES.map(s => ({name: s.n, startFrame: Math.round(s.t / 1000 * FPS)})),
+  keyFrames: KEYS.map(k => Math.round(k / 1000 * FPS)),
+  seek(f){ setPlaying(false); frame = Math.max(0, Math.min(FRAMES - 1, f | 0)); render(frame); },
+  renderFrame(f){ render(Math.max(0, Math.min(FRAMES - 1, f | 0))); }
+};
+
+render(0);
+setPlaying(true);
+requestAnimationFrame(tick);
+})();
+</script>
+
+<!-- FILM_META:
+{
+  "composition": "minitify-one-take",
+  "fps": 30, "durationInFrames": 900, "width": 1920, "height": 1080,
+  "loop": "seamless — frames 888-900 dissolve back to the frame 0 state",
+  "timingSource": "motion.html (curves and durations quoted verbatim; camera moves are film-level)",
+  "scenes": [
+    {"frame":   0, "ms":     0, "name": "Terminal",            "summary": "minitify play is typed, the banner prints, the loading line redraws in place, the stages advance"},
+    {"frame": 195, "ms":  6500, "name": "The panel arrives",   "summary": "launch card enters, the mark plays its four beats and lands on the M, the card becomes the mini panel"},
+    {"frame": 345, "ms": 11500, "name": "Mini to Normal",      "summary": "hover reveals the circles, the window grows, artwork and title travel, secondary controls arrive 90 ms late"},
+    {"frame": 450, "ms": 15000, "name": "Playing",             "summary": "play/pause replaces, shuffle and repeat bounce on, the heart fills green, seek advances"},
+    {"frame": 570, "ms": 19000, "name": "Queue",               "summary": "normal grows to extended and the four queue rows stagger in"},
+    {"frame": 660, "ms": 22000, "name": "Library",             "summary": "the window opens, within is typed, rows filter, one is selected and started, the equaliser follows it"},
+    {"frame": 795, "ms": 26500, "name": "Drag, and rest",      "summary": "the panel is lifted, dragged past the right edge, springs back inside the frame, collapses to mini and rests"}
+  ],
+  "durations": {
+    "reveal": 160, "tint": 180, "press": 120, "replace": 250, "bounce": 220,
+    "grab": 120, "release": 160, "mode": 280, "queue": 280, "row": 180,
+    "rowStagger": 40, "secondaryDelay": 90, "windowIn": 240, "windowOut": 180,
+    "filter": 150, "reflow": 200, "clamp": 380, "equaliser": 1100,
+    "logo": 3600, "card": 240, "stage": 900, "print": 90, "loadingFrame": 100
+  },
+  "easing": {
+    "enter": "cubic-bezier(0,0,.2,1)", "exit": "cubic-bezier(.4,0,1,1)",
+    "standard": "cubic-bezier(.4,0,.2,1)", "panel": "cubic-bezier(.32,.72,0,1)",
+    "settle": "cubic-bezier(.22,1.1,.36,1)", "overshoot": "cubic-bezier(.2,1.22,.4,1)"
+  }
+}
+-->
+
+</body>
+</html>

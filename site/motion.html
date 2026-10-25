@@ -1,0 +1,2090 @@
+<!doctype html>
+<html lang="en" data-reduce="off">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>minitify · motion</title>
+<style>
+/* ══ tokens ══════════════════════════════════════════════════════
+   Nothing new. The palette, radii and materials are the shipping
+   ones; only the timing vocabulary is added here.                  */
+:root{
+  --page:#111315; --card:#16191c; --well:#13161a;
+  --text:#f0f2f3; --muted:#99a2a8; --dim:#78858e; --body:#c0c9cf;
+  --line:#ffffff1c; --hair:#ffffff12;
+  --green:#87e6a6; --green-2:#9ce8b5; --green-deep:#3fb673;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* the five curves — see the reference table at the top of the page */
+  --e-out:cubic-bezier(0,0,.2,1);
+  --e-in:cubic-bezier(.4,0,1,1);
+  --e-standard:cubic-bezier(.4,0,.2,1);
+  --e-panel:cubic-bezier(.32,.72,0,1);
+  --e-spring:cubic-bezier(.22,1.1,.36,1);
+  --e-overshoot:cubic-bezier(.2,1.22,.4,1);
+
+  /* durations, in the macOS bands */
+  --d-reveal:160ms;   --d-tint:180ms;    --d-press:120ms;
+  --d-replace-out:150ms; --d-replace-in:175ms; --d-replace-lag:75ms;
+  --d-bounce:220ms;   --d-grab:120ms;    --d-release:160ms;
+  --d-pop-in:200ms;   --d-pop-out:150ms;
+  --d-mode:280ms;     --d-queue:280ms;   --d-row:180ms;
+  --d-win-in:240ms;   --d-win-out:180ms;
+  --d-filter:150ms;   --d-reflow:200ms;  --d-clamp:380ms;
+  --d-eq:1100ms;      --d-logo:3600ms;   --d-card:240ms;  --d-stage:900ms;
+  --d-print:90ms;     --d-frame:100ms;
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--page);color:var(--text);
+  font:16px/1.6 var(--font);-webkit-font-smoothing:antialiased}
+button,input{font:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid #54b77a;outline-offset:2px}
+main{width:1168px;margin:auto;padding:36px 32px 72px}
+code{font-family:var(--mono);font-size:.88em}
+
+/* ══ page chrome ═════════════════════════════════════════════════ */
+.top-bar{display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid var(--line);padding-bottom:24px}
+.brand{font-size:22px;font-weight:600;letter-spacing:-.02em}
+.brand span{color:var(--green)}
+.eyebrow{font-size:10px;letter-spacing:.09em;color:var(--muted)}
+.intro{display:flex;justify-content:space-between;align-items:flex-end;gap:48px;margin:32px 0 8px}
+.intro h1{font-size:42px;line-height:1.12;letter-spacing:-.025em;font-weight:600;margin:0 0 14px}
+.intro p{font-size:14px;line-height:1.7;color:var(--muted);margin:0;max-width:66ch}
+.intro b{color:var(--body);font-weight:550}
+.intro aside{font-size:11px;color:var(--green);text-align:right;flex:none;line-height:1.7}
+
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:28px 0 0;
+  padding:12px;border-radius:12px;background:var(--card);border:1px solid var(--hair)}
+.toolbar .label{font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:550;
+  margin:0 4px 0 6px}
+.toolbar .fill{flex:1}
+.toolbar .hint{font-size:11px;color:var(--dim);padding-right:6px}
+
+.ghost{appearance:none;border:1px solid var(--hair);background:#1b1f23;color:var(--text);
+  font:inherit;font-size:11.5px;letter-spacing:.01em;padding:7px 13px;border-radius:8px;
+  cursor:pointer;transition:border-color var(--d-press) var(--e-out),color var(--d-press) var(--e-out),
+  background-color var(--d-press) var(--e-out)}
+.ghost:hover{border-color:var(--green-deep);color:#fff}
+.ghost[aria-pressed=true]{background:var(--green);border-color:var(--green);color:#0d2417;font-weight:600}
+
+/* ══ the curve reference ═════════════════════════════════════════ */
+.section-title{display:flex;justify-content:space-between;align-items:baseline;gap:24px;margin:44px 0 16px}
+.section-title h2{font-size:16px;font-weight:600;letter-spacing:-.01em;margin:0}
+.section-title p{font-size:12px;color:var(--muted);margin:0}
+
+.curves{width:100%;border-collapse:collapse;font-size:12px}
+.curves th{text-align:left;font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:550;
+  padding:0 16px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+.curves td{padding:11px 16px 11px 0;border-bottom:1px solid var(--hair);
+  vertical-align:top;color:var(--body);line-height:1.6}
+.curves td:first-child{font-weight:550;color:var(--text);white-space:nowrap}
+.curves tr:last-child td{border-bottom:0}
+.curves code{color:#dfe7e4;background:#ffffff0d;padding:2px 6px;border-radius:4px;
+  font-size:10.5px;white-space:nowrap}
+.curves .plot{width:46px;height:46px;display:block;overflow:visible}
+.curves .plot path{fill:none;stroke:var(--green);stroke-width:2;stroke-linecap:round}
+.curves .plot rect{fill:#ffffff0a;stroke:#ffffff1a;stroke-width:1}
+
+/* ══ feature cards ═══════════════════════════════════════════════ */
+.feature{border-top:1px solid var(--line);margin-top:44px;padding-top:22px}
+.feature-head{display:flex;justify-content:space-between;align-items:baseline;gap:32px;margin-bottom:18px}
+.feature-head .no{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--green);
+  flex:none;padding-top:4px;width:34px}
+.feature-head hgroup{flex:1;min-width:0}
+.feature-head h2{font-size:19px;font-weight:600;letter-spacing:-.018em;margin:0 0 5px;line-height:1.3}
+.feature-head p{font-size:12.5px;line-height:1.65;color:var(--muted);margin:0;max-width:74ch}
+.feature-head .tag{flex:none;font-size:9px;letter-spacing:.08em;color:var(--muted);
+  border:1px solid var(--hair);border-radius:6px;padding:5px 9px;white-space:nowrap}
+
+.feature-body{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:22px;align-items:start}
+.feature.wide .feature-body{grid-template-columns:minmax(0,1fr)}
+.spec-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-top:18px}
+.demo-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;align-items:start}
+
+.demo{min-width:0}
+.demo>h3,.spec>h3{font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:550;
+  margin:0 0 10px}
+.controls{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;align-items:center}
+.controls .state{font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.02em;
+  padding-left:4px}
+
+/* ══ spec block ══════════════════════════════════════════════════ */
+.spec{background:var(--well);border:1px solid var(--hair);border-radius:12px;padding:16px 18px 18px}
+.beatmap{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:4px}
+.beatmap th{text-align:left;font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:550;
+  padding:0 0 7px;border-bottom:1px solid var(--hair)}
+.beatmap td{padding:7px 0;border-bottom:1px solid var(--hair);vertical-align:top;
+  color:var(--body);line-height:1.5}
+.beatmap td:first-child,.beatmap th:first-child{width:78px;padding-right:12px}
+.beatmap td:first-child{font-family:var(--mono);font-size:10.5px;color:var(--green);white-space:nowrap}
+.beatmap tr:last-child td{border-bottom:0}
+.beatmap b{font-weight:550;color:#e2e8ec}
+
+.facts{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px 12px;margin:14px 0 0;
+  font-size:11.5px;border-top:1px solid var(--hair);padding-top:14px}
+.facts dt{font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:550;padding-top:3px}
+.facts dd{margin:0;color:var(--body);line-height:1.6}
+.facts code{color:#dfe7e4;background:#ffffff0d;padding:1.5px 5px;border-radius:4px;font-size:10.5px}
+.facts .api code{color:var(--green-2);background:#87e6a614}
+.facts .still code{color:#e8dfbe;background:#e8dfbe12}
+
+/* ══ stages ══════════════════════════════════════════════════════ */
+.scene{position:relative;border-radius:12px;overflow:hidden;display:flex;align-items:center;
+  justify-content:center;background:#425b63 url('assets/stock/desktop.jpg') center/cover}
+.scene:before{content:"";position:absolute;inset:0;background:#07192659}
+.scene>*{position:relative;z-index:1}
+.menubar{position:absolute;top:0;left:0;right:0;z-index:2;display:flex;justify-content:space-between;
+  padding:5px 14px;font-size:9px;color:#fff;background:#13252c4a;letter-spacing:.01em}
+
+/* control-level demos: the real control at true size, on an opaque
+   stand-in for the HUD material (no live vibrancy needed to read it) */
+.bench{display:flex;align-items:center;justify-content:center;gap:32px;flex-wrap:wrap;
+  min-height:132px;padding:26px;border-radius:12px;background:#1e2327;
+  box-shadow:inset 0 0 0 .5px #ffffff3b}
+.bench.light{background:#eef2f4;box-shadow:inset 0 0 0 .5px #17283224}
+
+/* HUD material tokens, copied from the shipping panel */
+.hud,.bench{--label:#f2f3f5;--secondary:#b4bec5;--material:rgba(30,35,39,.82);
+  --strip:rgba(9,14,18,.38);--rule:#ffffff22;--hover:#ffffff1c;--row:#ffffff10;
+  --active:#9ce8b5;--field:#11182044;color:var(--label)}
+.bench.light{--label:#20272b;--secondary:#58656c;--material:rgba(238,242,244,.82);
+  --strip:rgba(131,148,155,.2);--rule:#17283226;--hover:#17283218;--row:#ffffff73;
+  --active:#08733c;--field:#ffffff55}
+.hud{background:var(--material);backdrop-filter:blur(24px) saturate(1.4);
+  -webkit-backdrop-filter:blur(24px) saturate(1.4);border-radius:16px;
+  box-shadow:0 14px 32px #0005,inset 0 0 0 .5px #ffffff3b}
+
+/* ══ shared control atoms (from styles.css) ══════════════════════ */
+.icon{display:block;width:32px;height:32px;background:currentColor;flex:none;pointer-events:none;
+  mask:center/32px 32px no-repeat var(--symbol);
+  -webkit-mask:center/32px 32px no-repeat var(--symbol)}
+.btn{display:flex;align-items:center;justify-content:center;border:0;background:transparent;
+  color:var(--label);padding:0;width:32px;height:32px;border-radius:6px;flex:none;position:relative}
+.btn:hover{background:var(--hover)}
+.btn.small{width:24px;height:24px;color:var(--secondary)}
+.btn.small .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.btn.round{width:48px;height:48px;border-radius:50%;background:#87e6a6;color:#10271a}
+.btn.round .icon{mask-size:44px 44px;-webkit-mask-size:44px 44px}
+.btn.primary{background:var(--hover)}
+.art{display:block;border-radius:8px;object-fit:cover;flex:none;box-shadow:0 0 0 .5px #0002}
+.track-title{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-weight:600;font-size:24px;letter-spacing:-.015em;line-height:1.2}
+.artist{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  color:var(--secondary);font-size:13px;line-height:1.5}
+.logo{display:block;flex:none;fill:var(--active,#9ce8b5)}
+
+/* ── the .replace pair ─────────────────────────────────────────────
+   Two glyphs share one cell. The outgoing one scales down and out,
+   the incoming one scales up and in a beat later — exactly the shape
+   of SF Symbols' default .replace.downUp.                           */
+.sym{position:relative;display:grid;place-items:center;width:32px;height:32px;flex:none}
+.sym>.icon{grid-area:1/1;transform-origin:50% 50%}
+.sym>.icon[data-off]{opacity:0;transform:scale(.55);
+  transition:opacity var(--d-replace-out) var(--e-in),transform var(--d-replace-out) var(--e-in)}
+.sym>.icon:not([data-off]){opacity:1;transform:scale(1);
+  transition:opacity var(--d-replace-in) var(--e-out) var(--d-replace-lag),
+             transform var(--d-replace-in) cubic-bezier(.2,1.1,.4,1) var(--d-replace-lag)}
+.btn.small .sym,.sym.s24{width:24px;height:24px}
+.btn.round .sym{width:48px;height:48px}
+
+/* ── .bounce ──────────────────────────────────────────────────── */
+@keyframes bounce-up{0%{transform:translateY(0) scale(1)}
+  38%{transform:translateY(-2.5px) scale(1.14)}
+  100%{transform:translateY(0) scale(1)}}
+@keyframes bounce-left{0%{transform:translateX(0) scale(1)}
+  38%{transform:translateX(-3px) scale(1.1)}
+  100%{transform:translateX(0) scale(1)}}
+@keyframes bounce-right{0%{transform:translateX(0) scale(1)}
+  38%{transform:translateX(3px) scale(1.1)}
+  100%{transform:translateX(0) scale(1)}}
+.bounce-up.hit>.icon,.bounce-up.hit>.sym{animation:bounce-up var(--d-bounce) var(--e-standard)}
+.bounce-left.hit>.icon{animation:bounce-left var(--d-bounce) var(--e-standard)}
+.bounce-right.hit>.icon{animation:bounce-right var(--d-bounce) var(--e-standard)}
+
+/* ── accent tint ──────────────────────────────────────────────── */
+.tintable{color:var(--secondary);transition:color var(--d-tint) var(--e-out)}
+.tintable.on{color:var(--active)}
+
+/* ══ 01 · launch ═════════════════════════════════════════════════ */
+.launch-scene{height:372px;gap:28px}
+.launch-card{width:240px;height:196px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:16px;opacity:0;transform:scale(.96) translateY(6px)}
+.run .launch-card{opacity:1;transform:none;
+  transition:opacity var(--d-card) var(--e-out),transform var(--d-card) var(--e-panel)}
+.launch-status{display:flex;flex-direction:column;align-items:center;gap:3px;height:34px}
+.launch-status b{font-size:12px;font-weight:550;letter-spacing:-.005em}
+.launch-track{font-size:10.5px;color:var(--secondary);min-height:14px;opacity:0;
+  transition:opacity var(--d-card) var(--e-out)}
+.launch-track.on{opacity:1}
+
+.stage-lines{position:relative;height:17px;width:210px}
+.stage-lines b{position:absolute;left:50%;top:0;transform:translateX(-50%);white-space:nowrap;
+  font-size:12px;font-weight:550;letter-spacing:-.005em;opacity:0}
+.run .stage-lines b{animation:stage-line var(--d-stage) var(--e-standard) both}
+.run .stage-lines b:nth-child(1){animation-delay:240ms}
+.run .stage-lines b:nth-child(2){animation-delay:1140ms}
+.run .stage-lines b:nth-child(3){animation-delay:2040ms}
+.run .stage-lines b:nth-child(4){animation-name:stage-hold;animation-delay:2940ms}
+@keyframes stage-line{0%{opacity:0}18%{opacity:1}82%{opacity:1}100%{opacity:0}}
+@keyframes stage-hold{0%{opacity:0}18%,100%{opacity:1}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+.run .launch-track{animation:fade-in var(--d-card) var(--e-out) 3240ms both}
+.launch-card .logo{opacity:0}
+.run .launch-card .logo{animation:fade-in var(--d-card) var(--e-out) 120ms both}
+
+/* ══ terminal (01 + 11) ══════════════════════════════════════════ */
+.term{width:400px;border-radius:9px;overflow:hidden;background:#101a20f2;
+  box-shadow:0 16px 34px #0006,inset 0 0 0 .5px #ffffff26}
+.term-bar{display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;
+  background:#18252cf2;border-bottom:.5px solid #ffffff14}
+.term-bar i{width:9px;height:9px;border-radius:50%;background:#ffffff26}
+.term-bar span{margin-left:6px;font-size:9.5px;color:#8fa0a8;letter-spacing:.01em}
+.term-body{margin:0;padding:14px 16px 16px;font:11px/1.55 var(--mono);color:#b7c6c1;white-space:pre}
+.term-cmd{display:block;color:#dfe7e4;margin-bottom:10px}
+.term-banner{display:block;color:#87e6a6;line-height:1;letter-spacing:0;font-size:13px}
+.term-banner span{display:block;opacity:0}
+.run .term-banner span{animation:term-print 1ms linear both}
+.run .term-banner span:nth-child(1){animation-delay:300ms}
+.run .term-banner span:nth-child(2){animation-delay:390ms}
+.run .term-banner span:nth-child(3){animation-delay:480ms}
+.run .term-banner span:nth-child(4){animation-delay:570ms}
+.run .term-word{animation-delay:700ms}
+.term-word{display:block;margin:6px 0 12px;color:#dfe7e4;letter-spacing:.34em;font-size:10px;opacity:0}
+.run .term-word{animation:term-word 220ms var(--e-out) both}
+.term-load{display:block;color:#8fa0a8;min-height:17px}
+.term-eq{color:#87e6a6;font-weight:400;letter-spacing:.04em}
+.term-caret{display:inline-block;width:6px;height:11px;background:#87e6a6;vertical-align:-1px;
+  margin-left:2px;animation:caret 1060ms steps(1,end) infinite}
+@keyframes term-print{from{opacity:0}to{opacity:1}}
+@keyframes term-word{from{opacity:0;letter-spacing:.5em}to{opacity:1;letter-spacing:.34em}}
+@keyframes caret{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+
+/* ══ 02 · mode switch ════════════════════════════════════════════ */
+.shell{position:relative;padding:36px;flex:none;touch-action:none;user-select:none}
+.morph{position:relative;width:320px;height:60px;overflow:hidden;
+  transition:width var(--d-mode) var(--e-panel),height var(--d-mode) var(--e-panel)}
+.morph[data-mode=normal]{width:440px;height:188px}
+.morph[data-mode=extended]{width:440px;height:412px}
+.ml{position:absolute;
+  transition:left var(--d-mode) var(--e-panel),top var(--d-mode) var(--e-panel),
+    width var(--d-mode) var(--e-panel),height var(--d-mode) var(--e-panel),
+    gap var(--d-mode) var(--e-panel),border-radius var(--d-mode) var(--e-panel),
+    opacity var(--d-mode) var(--e-out),background-color var(--d-mode) var(--e-standard),
+    font-size var(--d-mode) var(--e-panel),letter-spacing var(--d-mode) var(--e-panel)}
+
+.m-art{left:10px;top:10px;width:40px;height:40px;border-radius:6px}
+.morph[data-mode=normal] .m-art,.morph[data-mode=extended] .m-art{left:20px;top:12px;width:88px;height:88px;border-radius:8px}
+
+.m-meta{left:60px;top:14px;width:190px}
+.morph[data-mode=normal] .m-meta,.morph[data-mode=extended] .m-meta{left:124px;top:18px;width:296px}
+.m-meta .track-title{font-size:13px;letter-spacing:0;line-height:1.3;
+  transition:font-size var(--d-mode) var(--e-panel),letter-spacing var(--d-mode) var(--e-panel),
+    line-height var(--d-mode) var(--e-panel)}
+.m-meta .artist{font-size:11px;letter-spacing:.01em;line-height:1.3;
+  transition:font-size var(--d-mode) var(--e-panel),line-height var(--d-mode) var(--e-panel)}
+.morph[data-mode=normal] .m-meta .track-title,.morph[data-mode=extended] .m-meta .track-title{font-size:24px;letter-spacing:-.015em;line-height:1.2}
+.morph[data-mode=normal] .m-meta .artist,.morph[data-mode=extended] .m-meta .artist{font-size:13px;line-height:1.5}
+
+.m-seek{left:124px;top:62px;width:296px;height:24px;opacity:0;pointer-events:none;
+  display:grid;grid-template-columns:30px minmax(0,1fr) 30px;align-items:center;gap:6px;
+  font-size:10px;color:var(--secondary);font-variant-numeric:tabular-nums}
+.morph[data-mode=normal] .m-seek,.morph[data-mode=extended] .m-seek{top:71px;opacity:1;pointer-events:auto;
+  transition-delay:90ms}
+.m-seek span:last-child{text-align:right}
+.rail{height:3px;border-radius:2px;background:var(--rule);position:relative}
+.rail i{position:absolute;inset:0 auto 0 0;background:var(--active);border-radius:2px}
+
+.m-strip{left:0;top:60px;width:320px;height:0;background:var(--strip);opacity:0;
+  border-radius:0 0 16px 16px}
+.morph[data-mode=normal] .m-strip{top:112px;width:440px;height:76px;opacity:1}
+.morph[data-mode=extended] .m-strip{top:112px;width:440px;height:76px;opacity:1;border-radius:0}
+
+.m-transport{left:206px;top:14px;display:flex;align-items:center;gap:4px}
+.morph[data-mode=normal] .m-transport,.morph[data-mode=extended] .m-transport{left:20px;top:126px;gap:8px}
+.m-play{width:32px;height:32px;border-radius:6px;background:var(--hover);color:var(--label);
+  transition:width var(--d-mode) var(--e-panel),height var(--d-mode) var(--e-panel),
+    border-radius var(--d-mode) var(--e-panel),background-color var(--d-mode) var(--e-standard),
+    color var(--d-mode) var(--e-standard)}
+.morph[data-mode=normal] .m-play,.morph[data-mode=extended] .m-play{width:48px;height:48px;border-radius:50%;
+  background:#87e6a6;color:#10271a}
+.m-play .sym{width:32px;height:32px;transition:width var(--d-mode) var(--e-panel),height var(--d-mode) var(--e-panel)}
+.morph[data-mode=normal] .m-play .sym,.morph[data-mode=extended] .m-play .sym{width:48px;height:48px}
+.m-play .icon{mask-size:32px 32px;-webkit-mask-size:32px 32px;
+  transition:mask-size var(--d-mode) var(--e-panel),-webkit-mask-size var(--d-mode) var(--e-panel)}
+.morph[data-mode=normal] .m-play .icon,.morph[data-mode=extended] .m-play .icon{mask-size:44px 44px;-webkit-mask-size:44px 44px}
+
+.m-modes{left:172px;top:150px;display:flex;align-items:center;gap:8px;padding:0 8px;opacity:0;
+  border-left:.5px solid var(--rule);border-right:.5px solid var(--rule);height:24px}
+.m-extras{left:268px;top:150px;display:flex;align-items:center;gap:8px;opacity:0;height:24px}
+.morph[data-mode=normal] .m-modes,.morph[data-mode=extended] .m-modes,
+.morph[data-mode=normal] .m-extras,.morph[data-mode=extended] .m-extras{top:138px;opacity:1;transition-delay:90ms}
+.m-vol{display:flex;align-items:center;gap:4px;width:88px}
+.m-vol .icon{width:20px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.m-vol .rail{width:64px}
+
+.m-queue{left:0;top:188px;width:440px;height:0;opacity:0;overflow:hidden;
+  border-top:.5px solid var(--rule)}
+.morph[data-mode=extended] .m-queue{height:224px;opacity:1}
+.q-head{height:32px;display:flex;justify-content:space-between;align-items:center;
+  padding:0 20px;font-size:11px;color:var(--secondary)}
+.q-head b{font-weight:550;color:var(--label)}
+.q-row{height:48px;display:flex;align-items:center;gap:10px;padding:4px 20px;
+  opacity:0;transform:translateY(8px)}
+.morph[data-mode=extended] .q-row{opacity:1;transform:none;
+  transition:opacity var(--d-row) var(--e-out),transform var(--d-row) var(--e-out)}
+.morph[data-mode=extended] .q-row:nth-child(2){transition-delay:120ms}
+.morph[data-mode=extended] .q-row:nth-child(3){transition-delay:160ms}
+.morph[data-mode=extended] .q-row:nth-child(4){transition-delay:200ms}
+.morph[data-mode=extended] .q-row:nth-child(5){transition-delay:240ms}
+.q-row img{width:32px;height:32px;border-radius:4px;object-fit:cover;flex:none}
+.q-row .track-title{font-size:12px;letter-spacing:0;line-height:1.5}
+.q-row .artist{font-size:10px}
+.q-row>div{flex:1;min-width:0}
+.q-row .duration{font-size:11px;font-variant-numeric:tabular-nums;color:var(--secondary)}
+
+/* ── the detached circles ─────────────────────────────────────── */
+.orb{position:absolute;width:28px;height:28px;border:0;border-radius:50%;
+  background:#323d45ec;color:#e1e9ee;display:flex;align-items:center;justify-content:center;
+  padding:0;box-shadow:0 4px 12px #0003;opacity:0;pointer-events:none;
+  transition:opacity var(--d-reveal) var(--e-out)}
+.orb .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.orb:hover{background:#a6dcb9;color:#173526}
+.shell:hover .orb,.shell:focus-within .orb,.shell.peek .orb{opacity:1;pointer-events:auto}
+.mode-orb{top:52px;right:0}
+.shell[data-mode=mini] .mode-orb{top:16px}
+.shell[data-side=left] .mode-orb{right:auto;left:0}
+.win-orbs{position:absolute;right:36px;bottom:0;display:flex;gap:8px}
+.shell[data-vertical=top] .win-orbs{bottom:auto;top:0}
+.shell[data-mode=mini] .win-orbs{display:none}
+.win-orbs .orb{position:static}
+
+.mode-scene{height:556px}
+.edge-scene{height:400px;align-items:flex-start;justify-content:flex-start}
+.edge-shell{position:absolute;left:52px;top:36px;transition:transform 420ms var(--e-panel)}
+
+/* ══ 04 · seek & volume ══════════════════════════════════════════ */
+.slider{position:relative;height:16px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.slider .rail{flex:1}
+.slider .thumb{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;
+  background:var(--active);box-shadow:0 1px 3px #0006;
+  transform:translate(-50%,-50%) scale(1);
+  transition:transform var(--d-release) var(--e-spring)}
+.slider.grabbed .thumb{transform:translate(-50%,-50%) scale(1.25);
+  transition:transform var(--d-grab) var(--e-out)}
+.slider.scrub .thumb,.slider.scrub .rail i{transition:none}
+.seek-demo{width:296px;display:grid;grid-template-columns:30px minmax(0,1fr) 30px;
+  align-items:center;gap:6px;font-size:10px;color:var(--secondary);font-variant-numeric:tabular-nums}
+.seek-demo span:last-child{text-align:right}
+.vol-demo{display:flex;align-items:center;gap:4px;width:88px}
+.vol-demo .icon{width:20px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.vol-demo .slider{width:64px}
+
+/* ══ 03 / 05 · control clusters ══════════════════════════════════ */
+.bench figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:12px}
+.bench figcaption{font-size:9px;letter-spacing:.08em;color:var(--secondary);text-align:center}
+.cluster{display:flex;align-items:center;gap:8px}
+.cluster.tight{gap:4px}
+.cluster.divided{border-left:.5px solid var(--rule);border-right:.5px solid var(--rule);padding:0 10px}
+
+/* ══ 06 · like, library row ══════════════════════════════════════ */
+.lib-row{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1fr) 40px 28px;
+  gap:12px;align-items:center;height:40px;width:420px;padding:0 8px;border-radius:8px;
+  background:var(--row);box-shadow:inset 0 0 0 .5px var(--rule);font-size:12px;
+  border:0;color:var(--label);text-align:left;
+  transition:background-color var(--d-press) var(--e-out),color var(--d-tint) var(--e-out),
+    box-shadow var(--d-press) var(--e-out),opacity var(--d-filter) var(--e-in),
+    height var(--d-reflow) var(--e-panel),margin var(--d-reflow) var(--e-panel)}
+.lib-row:hover{background:var(--hover)}
+.lib-row.playing{color:var(--active)}
+.lib-row.selected{background:var(--hover);box-shadow:inset 0 0 0 1px var(--rule)}
+.lib-row .row-art{position:relative;width:28px;height:28px;flex:none}
+.lib-row .row-art img{width:28px;height:28px;border-radius:5px;object-fit:cover;display:block}
+.lib-row .row-title{display:block;min-width:0;overflow:hidden;white-space:nowrap;
+  text-overflow:ellipsis;font-weight:550}
+.lib-row .track-play{display:flex;align-items:center;gap:10px;min-width:0;background:none;
+  border:0;color:inherit;padding:0;height:40px;font:inherit;font-size:12px;text-align:left}
+.lib-row .artist{font-size:11px}
+.lib-row .duration{font-size:11px;font-variant-numeric:tabular-nums;color:var(--secondary)}
+.row-heart{width:28px;height:28px;color:var(--secondary);opacity:.6;border-radius:6px;
+  transition:opacity var(--d-tint) var(--e-out),color var(--d-tint) var(--e-out)}
+.row-heart.on{opacity:1;color:var(--active)}
+.row-heart .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+
+/* the equaliser badge that marks the playing row */
+.eq{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:14px;height:14px;
+  color:var(--active);flex:none}
+.eq i{display:block;width:2px;border-radius:1px;background:currentColor;height:7px}
+.eq.live i{animation:eqa var(--d-eq) var(--e-standard) infinite}
+.eq.live i:nth-child(2){animation-name:eqb;animation-duration:calc(var(--d-eq) * .78)}
+.eq.live i:nth-child(3){animation-name:eqc;animation-duration:calc(var(--d-eq) * .92)}
+.eq i:nth-child(2){height:12px}.eq i:nth-child(3){height:9px}
+@keyframes eqa{0%,100%{height:5px}30%{height:13px}62%{height:7px}}
+@keyframes eqb{0%,100%{height:12px}26%{height:4px}58%{height:14px}}
+@keyframes eqc{0%,100%{height:9px}40%{height:14px}72%{height:5px}}
+.eq.paused{opacity:.45}
+.eq.paused i{animation-play-state:paused}
+.lib-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  height:0;overflow:hidden;padding:0 20px;text-align:center;opacity:0;pointer-events:none;
+  transition:opacity var(--d-filter) var(--e-out)}
+.lib-empty.on{height:auto;min-height:140px;padding:20px;opacity:1}
+.lib-empty .icon{color:var(--active)}
+.lib-empty strong{font-size:14px;font-weight:550}
+.lib-empty p{font-size:12px;line-height:1.6;color:var(--secondary);max-width:34ch;margin:0}
+.row-art .eq{position:absolute;right:-1px;bottom:-1px;border-radius:3px;background:#10171be6;
+  padding:1px;width:14px;height:14px}
+
+/* ══ 07 · device popover ═════════════════════════════════════════ */
+.pop-host{position:relative;display:flex;align-items:flex-end;justify-content:flex-end;
+  width:220px;height:200px}
+.popover{position:absolute;right:0;bottom:34px;width:184px;padding:8px;border-radius:8px;
+  background:#263139;color:#f1f4f5;box-shadow:0 8px 24px #0005;transform-origin:100% 100%;
+  opacity:0;transform:scale(.92) translateY(6px);pointer-events:none;
+  transition:opacity var(--d-pop-out) var(--e-in),transform var(--d-pop-out) var(--e-in)}
+.popover.open{opacity:1;transform:none;pointer-events:auto;
+  transition:opacity var(--d-pop-in) var(--e-out),transform var(--d-pop-in) var(--e-panel)}
+.popover strong{display:block;padding:4px 8px;font-size:11px;font-weight:550}
+.device-option{display:flex;gap:8px;align-items:center;width:100%;border:0;background:transparent;
+  color:inherit;font-size:12px;padding:8px;border-radius:4px;text-align:left}
+.device-option:hover{background:#ffffff14}
+.device-option .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.device-option .check{margin-left:auto;width:18px;height:18px;mask-size:20px 20px;
+  -webkit-mask-size:20px 20px;color:var(--green);opacity:0;
+  transition:opacity var(--d-tint) var(--e-out)}
+.device-option.on .check{opacity:1}
+
+/* ══ 09 · library window ═════════════════════════════════════════ */
+.lib-scene{height:580px}
+.library{width:800px;height:500px;display:flex;flex-direction:column;overflow:hidden;
+  position:relative;transform-origin:50% 54%;
+  opacity:0;transform:scale(.94);pointer-events:none;
+  transition:opacity var(--d-win-out) var(--e-in),transform var(--d-win-out) var(--e-in)}
+.library.open{opacity:1;transform:none;pointer-events:auto;
+  transition:opacity var(--d-win-in) var(--e-out),transform var(--d-win-in) var(--e-panel)}
+.library-top{display:flex;align-items:center;gap:20px;height:64px;flex:none;padding:12px 20px;
+  border-bottom:.5px solid var(--rule);background:var(--strip)}
+.library-brand{display:flex;align-items:center;gap:8px;min-width:160px}
+.library-brand em{font-style:normal;font-size:15px;font-weight:600;letter-spacing:-.03em}
+.library-brand em i{font-style:normal;color:var(--active)}
+.search{display:flex;align-items:center;gap:4px;background:var(--field);
+  border:.5px solid var(--rule);height:32px;border-radius:7px;flex:1;padding:0 8px;
+  color:var(--secondary)}
+.search .icon{width:24px;height:24px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.search input{width:100%;background:transparent;color:var(--label);border:0;outline:none;
+  font-size:13px;min-width:0}
+.search input::placeholder{color:var(--secondary)}
+.library-body{display:grid;grid-template-columns:200px minmax(0,1fr);flex:1;min-height:0}
+.sidebar{display:flex;flex-direction:column;padding:16px 12px;border-right:.5px solid var(--rule);
+  background:var(--strip)}
+.sidebar button{display:flex;align-items:center;gap:10px;width:100%;height:56px;border:0;
+  color:var(--secondary);background:transparent;border-radius:6px;text-align:left;padding:8px;
+  font-size:12px;flex:none;transition:background-color var(--d-press) var(--e-out),
+  color var(--d-press) var(--e-out)}
+.sidebar button:hover{background:var(--hover)}
+.sidebar button.selected{color:var(--label);background:var(--hover);font-weight:550}
+.sidebar-cover{width:32px;height:32px;border-radius:5px;object-fit:cover;flex:none}
+.liked-cover{width:32px;height:32px;border-radius:5px;flex:none;display:flex;align-items:center;
+  justify-content:center;background:var(--strip);border:.5px solid var(--rule);color:var(--active)}
+.liked-cover .icon{width:20px;height:20px;mask-size:24px 24px;-webkit-mask-size:24px 24px}
+.sidebar-label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sidebar-label b{font-size:12px;font-weight:550;white-space:nowrap}
+.sidebar-label small{font-size:10px;color:var(--secondary)}
+.playlist-divider{height:.5px;background:var(--rule);margin:14px 8px}
+.sidebar h3{font-size:9px;letter-spacing:.08em;color:var(--secondary);font-weight:550;margin:0 12px 8px}
+.tracks-pane{display:flex;flex-direction:column;padding:16px 12px 0;overflow:hidden;min-width:0}
+.collection-header{display:flex;align-items:center;gap:16px;height:112px;flex:none;padding:0 8px 16px}
+.collection-header .cover{width:88px;height:88px;border-radius:8px;object-fit:cover;flex:none}
+.collection-kicker{font-size:9px;letter-spacing:.08em;color:var(--secondary);font-weight:550}
+.collection-title{font-size:28px;letter-spacing:-.02em;line-height:1.15;font-weight:600;margin:2px 0 4px}
+.collection-facts{font-size:11px;color:var(--secondary);margin:0}
+.table-head{display:grid;grid-template-columns:28px minmax(0,1.5fr) minmax(0,1fr) 40px 28px;
+  gap:12px;height:28px;align-items:center;flex:none;padding:0 8px;font-size:10px;
+  color:var(--secondary);border-bottom:.5px solid var(--rule)}
+.library-scroll{flex:1;min-height:0;overflow:auto;padding-top:8px}
+.track-list{display:flex;flex-direction:column;gap:6px}
+.track-list .lib-row{width:auto}
+.lib-row.gone{height:0;opacity:0;margin-top:-6px;pointer-events:none;overflow:hidden;
+  box-shadow:none}
+.list-end{font-size:10px;line-height:1.6;color:var(--secondary);margin:16px 0 20px;text-align:center}
+.library-now{display:flex;align-items:center;gap:10px;height:56px;flex:none;padding:0 8px;
+  border-top:.5px solid var(--rule)}
+.library-now img{width:32px;height:32px;border-radius:4px;object-fit:cover}
+.library-now>div{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.library-now span{font-size:8px;letter-spacing:.08em;color:var(--active)}
+.library-now strong{font-size:11px;font-weight:550;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.library-now small{font-size:10px;color:var(--secondary);font-weight:400}
+
+/* ══ 10 · drag ═══════════════════════════════════════════════════ */
+.drag-scene{height:300px;align-items:flex-start;justify-content:flex-start;padding:40px}
+.drag-shell{position:absolute;left:40px;top:60px;cursor:grab;
+  transition:transform var(--d-clamp) var(--e-spring)}
+.drag-shell.scrub{transition:none}
+.drag-shell.lifted{cursor:grabbing}
+.drag-shell .mini{transform:scale(1);box-shadow:0 14px 32px #0005,inset 0 0 0 .5px #ffffff3b;
+  transition:transform var(--d-release) var(--e-spring),box-shadow var(--d-release) var(--e-out)}
+.drag-shell.lifted .mini{transform:scale(1.015);
+  box-shadow:0 22px 48px #0007,inset 0 0 0 .5px #ffffff4d;
+  transition:transform var(--d-grab) var(--e-out),box-shadow var(--d-grab) var(--e-out)}
+.mini{width:320px;height:60px;display:flex;align-items:center;gap:10px;padding:10px}
+.mini .art{width:40px;height:40px;border-radius:6px}
+.mini .track-title{font-size:13px;letter-spacing:0;line-height:1.3}
+.mini .artist{font-size:11px;line-height:1.3}
+.mini .meta{flex:1;min-width:0}
+.midline{position:absolute;top:0;bottom:0;left:50%;width:1px;background:#87e6a64d;z-index:0}
+.midline:after{content:"SCREEN MIDLINE";position:absolute;top:8px;left:7px;font-size:8px;
+  letter-spacing:.08em;color:#87e6a6aa;white-space:nowrap}
+
+/* ══ reduce motion ═══════════════════════════════════════════════
+   One switch. Durations collapse, the state change still lands, and
+   anything that only loops simply stops on its resting frame.       */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:1ms!important;animation-delay:0ms!important;
+    animation-iteration-count:1!important;transition-duration:1ms!important;transition-delay:0ms!important}
+  .logo rect,.eq.live i,.term-caret,.term-banner span,.term-word{animation:none!important}
+  .term-banner span,.term-word{opacity:1!important}
+}
+[data-reduce=on] *,[data-reduce=on] *::before,[data-reduce=on] *::after{
+  animation-duration:1ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;
+  transition-duration:1ms!important;transition-delay:0ms!important}
+[data-reduce=on] .logo rect,[data-reduce=on] .eq.live i,[data-reduce=on] .term-caret,
+[data-reduce=on] .term-banner span,[data-reduce=on] .term-word{animation:none!important}
+[data-reduce=on] .term-banner span,[data-reduce=on] .term-word{opacity:1!important}
+
+footer{display:flex;justify-content:space-between;gap:32px;border-top:1px solid var(--line);
+  margin-top:48px;padding-top:20px;font-size:10px;color:var(--dim);letter-spacing:.02em}
+.closing{border-top:1px solid var(--line);margin-top:44px;padding-top:22px;
+  font-size:12.5px;line-height:1.8;color:var(--muted);max-width:92ch}
+.closing b{color:var(--body);font-weight:550}
+</style>
+</head>
+<body>
+<main>
+
+<div class="top-bar">
+  <div class="brand">minitify<span>.</span> motion</div>
+  <div class="eyebrow">EVERY MOVE, AT TRUE SIZE</div>
+</div>
+
+<section class="intro">
+  <div>
+    <h1>Motion that explains<br>where things came from.</h1>
+    <p>minitify is a floating AppKit panel with nowhere to hide: it sits over your work, so anything
+      that moves has to earn the attention it takes. This is the whole system — eleven behaviours,
+      each one a live demo at the size it ships at, with <b>its beat map, its exact duration, its curve
+      in both CSS and Core Animation, what deliberately stays still, and what happens under Reduce
+      Motion</b>. Nothing here needs a third-party library; every demo names the native API that
+      carries it.</p>
+  </div>
+  <aside>Hover a panel to wake its buttons<br>Click any demo to replay it<br>Drag the mini panel in 10</aside>
+</section>
+
+<div class="toolbar">
+  <span class="label">PAGE</span>
+  <button class="ghost" id="replay-all" type="button">Replay everything</button>
+  <button class="ghost" id="peek-all" type="button" aria-pressed="false">Force hover reveal</button>
+  <span class="fill"></span>
+  <span class="hint">Reduce Motion follows your system setting; override it here to see every fallback.</span>
+  <button class="ghost" id="reduce-toggle" type="button" aria-pressed="false">Reduce Motion</button>
+</div>
+
+<div class="section-title">
+  <h2>The vocabulary</h2>
+  <p>Five curves and four duration bands. Every feature below uses one of these; nothing is improvised per-screen.</p>
+</div>
+
+<table class="curves">
+  <thead><tr><th></th><th>CURVE</th><th>CSS</th><th>CORE ANIMATION</th><th>WHERE IT IS USED</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><svg class="plot" viewBox="0 0 46 46" aria-hidden="true"><rect x="0" y="0" width="46" height="46" rx="4"/><path d="M0,46 C0,46 9.2,0 46,0"/></svg></td>
+      <td>Enter</td>
+      <td><code>cubic-bezier(0, 0, .2, 1)</code></td>
+      <td><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code></td>
+      <td>Anything arriving: reveals, popovers, fades in, thumb grow.</td>
+    </tr>
+    <tr>
+      <td><svg class="plot" viewBox="0 0 46 46" aria-hidden="true"><rect x="0" y="0" width="46" height="46" rx="4"/><path d="M0,46 C18.4,46 46,0 46,0"/></svg></td>
+      <td>Exit</td>
+      <td><code>cubic-bezier(.4, 0, 1, 1)</code></td>
+      <td><code>CAMediaTimingFunction(controlPoints: 0.4, 0, 1, 1)</code></td>
+      <td>Anything leaving. Always ~60–70% of the matching entrance.</td>
+    </tr>
+    <tr>
+      <td><svg class="plot" viewBox="0 0 46 46" aria-hidden="true"><rect x="0" y="0" width="46" height="46" rx="4"/><path d="M0,46 C18.4,46 9.2,0 46,0"/></svg></td>
+      <td>Standard</td>
+      <td><code>cubic-bezier(.4, 0, .2, 1)</code></td>
+      <td><code>CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)</code></td>
+      <td>In-place changes: tint, bounce, a value sliding to a new state.</td>
+    </tr>
+    <tr>
+      <td><svg class="plot" viewBox="0 0 46 46" aria-hidden="true"><rect x="0" y="0" width="46" height="46" rx="4"/><path d="M0,46 C14.7,12.9 0,0 46,0"/></svg></td>
+      <td>Panel</td>
+      <td><code>cubic-bezier(.32, .72, 0, 1)</code></td>
+      <td><code>CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)</code></td>
+      <td>Geometry: window resize, mode switch, queue reveal. Leaves fast, lands soft.</td>
+    </tr>
+    <tr>
+      <td><svg class="plot" viewBox="0 0 46 46" aria-hidden="true"><rect x="0" y="0" width="46" height="46" rx="4"/><path d="M0,46 C10.1,-4.6 16.6,0 46,0"/></svg></td>
+      <td>Settle</td>
+      <td><code>cubic-bezier(.22, 1.1, .36, 1)</code></td>
+      <td><code>CASpringAnimation(mass: 1, stiffness: 320, damping: 26)</code></td>
+      <td>Only where something physical comes to rest: the drag clamp, a released slider thumb.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">
+  <h2>The bands</h2>
+  <p>A floating overlay is read in a glance. Only the launch story is allowed to take its time.</p>
+</div>
+
+<table class="curves">
+  <tbody>
+    <tr><td>120–160 ms</td><td colspan="4">Acknowledgement. Press feedback, hover reveal, a thumb growing under the pointer. Fast enough that it reads as the control responding, not animating.</td></tr>
+    <tr><td>180–250 ms</td><td colspan="4">Symbol and state. SF Symbols <code>.replace</code> and <code>.bounce</code>, accent tint, popover open. The macOS default band.</td></tr>
+    <tr><td>240–380 ms</td><td colspan="4">Geometry. Window resize, mode switch, queue reveal, the clamp back inside the frame. Anything where the eye has to follow a shape to a new place.</td></tr>
+    <tr><td>3600 ms</td><td colspan="4">Launch only. The mark plays its four beats once while the player connects; nothing else on the page is allowed near this length.</td></tr>
+  </tbody>
+</table>
+
+<!-- ══ 01 · LAUNCH ══════════════════════════════════════════════ -->
+<section class="feature wide" id="f-launch">
+  <div class="feature-head">
+    <span class="no">01</span>
+    <hgroup>
+      <h2>Launch</h2>
+      <p>The mark is the loading indicator. Five bars dance like a level meter, fall into a play
+        triangle, scatter back, then rise into the M and stay there — the resting logo is the last
+        frame of its own story. The same 3.6 s clock runs the floating card and the shell it was
+        launched from.</p>
+    </hgroup>
+    <span class="tag">CORE ANIMATION</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo-row" data-scope="launch">
+      <div class="demo">
+        <h3>FLOATING CARD · 240 × 196</h3>
+        <div class="scene launch-scene">
+          <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+          <div class="launch-card hud">
+            <div class="logo-slot" data-size="76"></div>
+            <div class="launch-status">
+              <div class="stage-lines">
+                <b>Connecting to Spotify</b><b>Waking the player</b><b>Fetching your library</b><b>Ready</b>
+              </div>
+              <span class="launch-track">Instant Crush · Daft Punk</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="demo">
+        <h3>THE SHELL IT CAME FROM · 80 COLUMNS</h3>
+        <div class="scene launch-scene">
+          <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+          <div class="term">
+            <div class="term-bar"><i></i><i></i><i></i><span>~/projects — zsh</span></div>
+            <pre class="term-body"><span class="term-cmd">❯ minitify play</span><span class="term-banner"></span><span class="term-word">minitify</span><span class="term-load"><b class="term-eq"></b> <span class="term-step"></span><span class="term-caret"></span></span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="ghost" type="button" data-replay="launch">Replay the launch</button>
+      <span class="state" data-state="launch">3600 ms · one pass · settles on the M</span>
+    </div>
+    <div class="spec-row">
+      <div class="spec">
+        <h3>BEAT MAP · THE MARK</h3>
+        <table class="beatmap">
+          <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+          <tbody>
+            <tr><td>0 ms</td><td><b>Level meter.</b> Five bars at deterministic noise heights, centred on the baseline.</td></tr>
+            <tr><td>252 / 504 / 756</td><td>Three more meter frames. The bars only change <code>height</code> and <code>y</code> — never x, width or corner.</td></tr>
+            <tr><td>1296 ms</td><td><b>Play triangle.</b> Heights step down left to right; still centred, so the silhouette reads as ▶ in one glance.</td></tr>
+            <tr><td>1656 ms</td><td>Held. The one still moment before the mark commits.</td></tr>
+            <tr><td>2088 / 2340 / 2628</td><td><b>Scatter.</b> Back to the meter, so the M has somewhere to rise from.</td></tr>
+            <tr><td>3276 ms</td><td><b>The M.</b> Bars jump to top-aligned <code>y 12</code>, heights 40 / 18 / 24 / 18 / 40, overshooting slightly.</td></tr>
+            <tr><td>3600 ms</td><td>Settled. This frame is the resting logo used everywhere else in the product.</td></tr>
+          </tbody>
+        </table>
+        <dl class="facts">
+          <dt>DURATION</dt><dd><code>3600 ms</code>, one pass, held on the final frame.</dd>
+          <dt>EASING</dt><dd>Per beat: <code>ease-in-out</code> between meter frames, <code>linear</code> into the triangle hold, <code>cubic-bezier(.5,0,.2,1)</code> / <code>(.55,0,.25,1)</code> / <code>(.4,0,.18,1)</code> at the hand-offs, <code>cubic-bezier(.2,1.22,.4,1)</code> into the M.</dd>
+          <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(name: .easeInEaseOut)</code>, <code>.linear</code>, and <code>controlPoints:</code> for the hand-offs. The overshoot into the M is a <code>CASpringAnimation(mass: 1, stiffness: 180, damping: 17)</code> or the same values baked into the keyframe list.</dd>
+          <dt class="still">STAYS STILL</dt><dd class="still">Everything except two properties. <code>x</code>, <code>width</code>, <code>rx</code>, bar count, colour and the 64 × 64 box never change — which is why the morph is a pure interpolation with no path matching.</dd>
+          <dt class="api">NATIVE API</dt><dd class="api">Five <code>CALayer</code> bars, one <code>CAKeyframeAnimation</code> each on <code>bounds.size.height</code> and <code>position.y</code>, grouped in a <code>CAAnimationGroup</code> with <code>fillMode = .forwards</code>. Runs on the compositor; no main-thread work per frame.</dd>
+          <dt>REDUCE MOTION</dt><dd>No animation is added at all — the layers are built at the M frame and stay there. The loading <em>state</em> is still communicated, by the text line below the mark.</dd>
+        </dl>
+      </div>
+      <div class="spec">
+        <h3>BEAT MAP · CARD AND SHELL</h3>
+        <table class="beatmap">
+          <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+          <tbody>
+            <tr><td>0 ms</td><td><b>Card appears.</b> Opacity 0 → 1 and scale 0.96 → 1 with a 6 pt rise, over 240 ms.</td></tr>
+            <tr><td>120 ms</td><td>The mark fades in inside the settled card, then starts its 3600 ms story.</td></tr>
+            <tr><td>240 ms</td><td><b>“Connecting to Spotify.”</b> Each stage label crossfades: 160 ms in, 580 ms held, 160 ms out.</td></tr>
+            <tr><td>1140 / 2040</td><td>“Waking the player”, “Fetching your library”. One stage per 900 ms, matched to the mark's beats.</td></tr>
+            <tr><td>2940 ms</td><td><b>“Ready”</b> arrives and stays — it does not fade out like the three before it.</td></tr>
+            <tr><td>3240 ms</td><td>The track line fades in under it, 240 ms. The card is now the player.</td></tr>
+            <tr><td>300–660 ms</td><td><b>Terminal banner</b> prints row by row, 90 ms apart, no fade — a shell prints, it does not animate.</td></tr>
+            <tr><td>700 ms</td><td>The wordmark settles its tracking from 0.5 em to 0.34 em over 220 ms, then the loading line starts cycling.</td></tr>
+          </tbody>
+        </table>
+        <dl class="facts">
+          <dt>DURATION</dt><dd>Card <code>240 ms</code> · stage label <code>900 ms</code> each · banner row <code>90 ms</code> apart · wordmark <code>220 ms</code>.</dd>
+          <dt>EASING</dt><dd>Card opacity <code>cubic-bezier(0,0,.2,1)</code>, card scale <code>cubic-bezier(.32,.72,0,1)</code>, label crossfade <code>cubic-bezier(.4,0,.2,1)</code>.</dd>
+          <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code> and <code>(0.32, 0.72, 0, 1)</code>; the label crossfade is <code>(0.4, 0, 0.2, 1)</code>.</dd>
+          <dt class="still">STAYS STILL</dt><dd class="still">The card never moves or resizes once placed — its frame is already the frame the player will occupy. The mark's 76 pt box and the terminal's column grid are fixed, so only glyphs and opacity change.</dd>
+          <dt class="api">NATIVE API</dt><dd class="api">Card entrance: <code>NSAnimationContext.runAnimationGroup</code> over the window's <code>animator().alphaValue</code> plus a <code>CABasicAnimation</code> on <code>transform.scale</code>. Labels: <code>NSTextField.animator().alphaValue</code>. The terminal is literal stdout — no animation API at all.</dd>
+          <dt>REDUCE MOTION</dt><dd>The card appears at full opacity and final scale. Labels swap instantly instead of crossfading. The banner prints in one write and the loading line stops cycling, holding the settled play shape.</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 02 · MODE SWITCH ═════════════════════════════════════════ -->
+<section class="feature wide" id="f-mode">
+  <div class="feature-head">
+    <span class="no">02</span>
+    <hgroup>
+      <h2>Mode switch</h2>
+      <p>Mini → Normal → Extended → Mini. The window really does resize, but the artwork, the title
+        and the transport are the <em>same views</em> moving to new frames — never torn down and
+        rebuilt. Watch the album cover: it grows from 40 to 88 pt along one continuous path, so the
+        eye never loses it.</p>
+    </hgroup>
+    <span class="tag">NSWINDOW + AUTO LAYOUT</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>THE CYCLE · 320 × 60 → 440 × 188 → 440 × 412</h3>
+      <div class="scene mode-scene">
+        <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+        <div class="shell" id="mode-shell" data-mode="mini" data-side="right" data-vertical="bottom">
+          <div class="morph hud" data-mode="mini">
+            <img class="ml m-art art" src="assets/album.svg" width="640" height="640" alt="Random Access Memories album artwork">
+            <div class="ml m-meta">
+              <span class="track-title">Instant Crush</span>
+              <span class="artist">Daft Punk</span>
+            </div>
+            <div class="ml m-strip"></div>
+            <div class="ml m-seek"><span>1:24</span><div class="rail"><i style="width:25%"></i></div><span>5:37</span></div>
+            <div class="ml m-transport">
+              <button class="btn bounce-left" type="button" aria-label="Previous track"><span class="icon" style="--symbol:url('assets/backward.fill.png')"></span></button>
+              <button class="btn m-play" type="button" data-play aria-label="Pause"><span class="sym"><span class="icon" style="--symbol:url('assets/pause.fill.png')"></span><span class="icon" data-off style="--symbol:url('assets/play.fill.png')"></span></span></button>
+              <button class="btn bounce-right" type="button" aria-label="Next track"><span class="icon" style="--symbol:url('assets/forward.fill.png')"></span></button>
+            </div>
+            <div class="ml m-modes">
+              <button class="btn small" type="button" aria-label="Shuffle off"><span class="icon" style="--symbol:url('assets/shuffle.png')"></span></button>
+              <button class="btn small" type="button" aria-label="Repeat off"><span class="icon" style="--symbol:url('assets/repeat.png')"></span></button>
+            </div>
+            <div class="ml m-extras">
+              <button class="btn small" type="button" aria-label="Like current track"><span class="icon" style="--symbol:url('assets/heart.png')"></span></button>
+              <button class="btn small" type="button" aria-label="Choose playback device"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span></button>
+              <span class="m-vol"><span class="icon" style="--symbol:url('assets/speaker.wave.2.fill.png')"></span><span class="rail"><i style="width:65%"></i></span></span>
+            </div>
+            <div class="ml m-queue">
+              <div class="q-head"><b>Up next</b><span>From Random Access Memories</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Lose Yourself to Dance</span><span class="artist">Daft Punk</span></div><span class="duration">5:53</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Giorgio by Moroder</span><span class="artist">Daft Punk</span></div><span class="duration">9:04</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Give Life Back to Music</span><span class="artist">Daft Punk</span></div><span class="duration">4:34</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Within</span><span class="artist">Daft Punk</span></div><span class="duration">3:48</span></div>
+            </div>
+          </div>
+          <button class="orb mode-orb" type="button" data-cycle aria-label="Change player mode"><span class="icon" style="--symbol:url('assets/arrow.up.left.and.arrow.down.right.png')"></span></button>
+          <div class="win-orbs">
+            <button class="orb" type="button" aria-label="Open library"><span class="icon" style="--symbol:url('assets/books.vertical.png')"></span></button>
+            <button class="orb" type="button" aria-label="Hide overlay"><span class="icon" style="--symbol:url('assets/xmark.png')"></span></button>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-cycle>Next mode</button>
+        <button class="ghost" type="button" data-mode-set="mini">Mini</button>
+        <button class="ghost" type="button" data-mode-set="normal">Normal</button>
+        <button class="ghost" type="button" data-mode-set="extended">Extended</button>
+        <span class="state" data-state="mode">mini · 320 × 60</span>
+      </div>
+    </div>
+
+    <div class="demo" style="margin-top:22px">
+      <h3>THE DETACHED CIRCLES · HOVER REVEAL AND FLIP</h3>
+      <div class="scene edge-scene">
+        <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+        <div class="midline"></div>
+        <div class="shell edge-shell" id="edge-shell" data-mode="normal" data-side="right" data-vertical="bottom">
+          <div class="morph hud" data-mode="normal">
+            <img class="ml m-art art" src="assets/album.svg" width="640" height="640" alt="Random Access Memories album artwork">
+            <div class="ml m-meta">
+              <span class="track-title">Instant Crush</span>
+              <span class="artist">Daft Punk</span>
+            </div>
+            <div class="ml m-strip"></div>
+            <div class="ml m-seek"><span>1:24</span><div class="rail"><i style="width:25%"></i></div><span>5:37</span></div>
+            <div class="ml m-transport">
+              <button class="btn bounce-left" type="button" aria-label="Previous track"><span class="icon" style="--symbol:url('assets/backward.fill.png')"></span></button>
+              <button class="btn m-play" type="button" data-play aria-label="Pause"><span class="sym"><span class="icon" style="--symbol:url('assets/pause.fill.png')"></span><span class="icon" data-off style="--symbol:url('assets/play.fill.png')"></span></span></button>
+              <button class="btn bounce-right" type="button" aria-label="Next track"><span class="icon" style="--symbol:url('assets/forward.fill.png')"></span></button>
+            </div>
+            <div class="ml m-modes">
+              <button class="btn small" type="button" aria-label="Shuffle off"><span class="icon" style="--symbol:url('assets/shuffle.png')"></span></button>
+              <button class="btn small" type="button" aria-label="Repeat off"><span class="icon" style="--symbol:url('assets/repeat.png')"></span></button>
+            </div>
+            <div class="ml m-extras">
+              <button class="btn small" type="button" aria-label="Like current track"><span class="icon" style="--symbol:url('assets/heart.png')"></span></button>
+              <button class="btn small" type="button" aria-label="Choose playback device"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span></button>
+              <span class="m-vol"><span class="icon" style="--symbol:url('assets/speaker.wave.2.fill.png')"></span><span class="rail"><i style="width:65%"></i></span></span>
+            </div>
+          </div>
+          <button class="orb mode-orb" type="button" aria-label="Change player mode"><span class="icon" style="--symbol:url('assets/arrow.up.left.and.arrow.down.right.png')"></span></button>
+          <div class="win-orbs">
+            <button class="orb" type="button" aria-label="Open library"><span class="icon" style="--symbol:url('assets/books.vertical.png')"></span></button>
+            <button class="orb" type="button" aria-label="Hide overlay"><span class="icon" style="--symbol:url('assets/xmark.png')"></span></button>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-edge="tl">Top left</button>
+        <button class="ghost" type="button" data-edge="tr">Top right</button>
+        <button class="ghost" type="button" data-edge="bl">Bottom left</button>
+        <button class="ghost" type="button" data-edge="br">Bottom right</button>
+        <span class="state" data-state="edge">mode button right · library and close below</span>
+      </div>
+    </div>
+
+    <div class="spec-row">
+      <div class="spec">
+        <h3>BEAT MAP · MINI → NORMAL → EXTENDED</h3>
+        <table class="beatmap">
+          <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+          <tbody>
+            <tr><td>0 ms</td><td><b>The window frame starts moving.</b> Height and width animate together; the top-left corner is pinned, so the panel grows downward and the title bar region never jumps.</td></tr>
+            <tr><td>0 ms</td><td><b>Artwork travels.</b> 40 → 88 pt, corner 6 → 8, origin (10, 10) → (20, 12). One view, one path.</td></tr>
+            <tr><td>0 ms</td><td><b>Title and artist travel with it.</b> 13 → 24 pt and 11 → 13 pt, tracking 0 → −0.015 em, along the same curve, so the text block stays glued to the artwork.</td></tr>
+            <tr><td>0 ms</td><td><b>Transport slides</b> from the right edge to the bottom strip; the play button grows 32 → 48 pt and its background crosses to <code>.systemGreen</code> over the same 280 ms.</td></tr>
+            <tr><td>90 ms</td><td><b>Secondary controls fade in</b> at their destinations — seek bar, shuffle / repeat, like / device / volume. They arrive late on purpose: nothing new competes with the things that moved.</td></tr>
+            <tr><td>280 ms</td><td>Everything has landed. Normal is complete.</td></tr>
+            <tr><td>+0 ms</td><td><b>Extended:</b> the window adds 224 pt and the queue is revealed. See 08 for the row stagger.</td></tr>
+          </tbody>
+        </table>
+        <dl class="facts">
+          <dt>DURATION</dt><dd><code>280 ms</code> for the frame and everything travelling; <code>280 ms</code> with a <code>90 ms</code> delay for arriving controls.</dd>
+          <dt>EASING</dt><dd><code>cubic-bezier(.32, .72, 0, 1)</code> for all geometry; <code>cubic-bezier(0, 0, .2, 1)</code> for the late fades.</dd>
+          <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)</code> set on <code>NSAnimationContext.current.timingFunction</code>; the fades use <code>(0, 0, 0.2, 1)</code>.</dd>
+          <dt class="still">STAYS STILL</dt><dd class="still">The window's <b>top edge</b> and its horizontal side against the screen. The artwork, title, artist and all three transport buttons are never removed from the hierarchy — no fade-out / fade-in, no re-layout flash. The queue below 412 pt stays mounted and simply has zero height.</dd>
+          <dt class="api">NATIVE API</dt><dd class="api"><code>NSWindow.setFrame(_:display:animate:)</code> inside <code>NSAnimationContext.runAnimationGroup</code>, with the subviews' <code>NSLayoutConstraint.animator().constant</code> changed in the same group so frame and contents share one clock. The play button's fill is a <code>CABasicAnimation</code> on <code>backgroundColor</code> and <code>cornerRadius</code>.</dd>
+          <dt>REDUCE MOTION</dt><dd>The window is resized with <code>animate: false</code> and the constraints are applied outside an animation group — the new mode simply <em>is</em>. No fade on the arriving controls either; a crossfade is still motion.</dd>
+        </dl>
+      </div>
+      <div class="spec">
+        <h3>BEAT MAP · MODE, LIBRARY AND CLOSE</h3>
+        <table class="beatmap">
+          <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+          <tbody>
+            <tr><td>rest</td><td>All three 28 pt circles are at <code>alpha 0</code>. The window is wider than the panel by 36 pt of transparent gutter on each side; the buttons live in that gutter.</td></tr>
+            <tr><td>0 ms</td><td><b>Pointer enters panel-plus-gutter.</b> Opacity 0 → 1 over 160 ms. All three reveal together — they are one control surface, not three.</td></tr>
+            <tr><td>0 ms</td><td><b>Pointer leaves.</b> Opacity 1 → 0 over 160 ms. Crossing the empty gap between panel and circle never hides them: panel, gutters and buttons share one tracking area.</td></tr>
+            <tr><td>on cross</td><td><b>Horizontal flip.</b> When the panel's centre crosses the screen midline, the mode circle swaps to the other side. Instant, no slide — it is not the same button travelling, it is the same button on the side that still has room.</td></tr>
+            <tr><td>on cross</td><td><b>Vertical flip.</b> Panel centre above the midline → library and close sit below; below it → they sit above. Same rule, same instant swap.</td></tr>
+            <tr><td>on press</td><td>Click cycles the mode; the glyph swaps to the collapse arrows with a <code>.replace</code> (see 03) while the window resizes.</td></tr>
+          </tbody>
+        </table>
+        <dl class="facts">
+          <dt>DURATION</dt><dd><code>160 ms</code> in, <code>160 ms</code> out. The flip is <code>0 ms</code> — deliberately.</dd>
+          <dt>EASING</dt><dd><code>cubic-bezier(0, 0, .2, 1)</code> on reveal, <code>cubic-bezier(.4, 0, 1, 1)</code> on hide.</dd>
+          <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code> / <code>(0.4, 0, 1, 1)</code>.</dd>
+          <dt class="still">STAYS STILL</dt><dd class="still">The panel itself — revealing the buttons must never nudge, scale or shadow the thing you are reading. The circles do not slide in, scale or bounce: opacity only, because they were always in that position.</dd>
+          <dt class="api">NATIVE API</dt><dd class="api">One <code>NSTrackingArea</code> spanning panel, gutters and all three buttons; <code>NSView.animator().alphaValue</code> inside <code>NSAnimationContext</code> for the fade. The flip is a constraint swap applied outside any animation group. Transparent gutters pass clicks through via <code>hitTest</code>, so only the visible circles are targets.</dd>
+          <dt>REDUCE MOTION</dt><dd>The circles appear and disappear at full opacity on the same hover boundary. Nothing is lost: the reveal was always a disclosure, never information.</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 03 · TRANSPORT ═══════════════════════════════════════════ -->
+<section class="feature" id="f-transport">
+  <div class="feature-head">
+    <span class="no">03</span>
+    <hgroup>
+      <h2>Transport</h2>
+      <p>Play / pause is a symbol being <em>replaced</em>; previous / next is a symbol acknowledging a
+        press. Two different jobs, so two different effects — and neither one is decoration.</p>
+    </hgroup>
+    <span class="tag">SF SYMBOLS</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>RICH TRANSPORT · 32 / 48 / 32 PT</h3>
+      <div class="bench">
+        <figure>
+          <div class="cluster">
+            <button class="btn bounce-left" type="button" data-bounce aria-label="Previous track"><span class="icon" style="--symbol:url('assets/backward.fill.png')"></span></button>
+            <button class="btn round" type="button" data-play aria-label="Pause"><span class="sym"><span class="icon" style="--symbol:url('assets/pause.fill.png')"></span><span class="icon" data-off style="--symbol:url('assets/play.fill.png')"></span></span></button>
+            <button class="btn bounce-right" type="button" data-bounce aria-label="Next track"><span class="icon" style="--symbol:url('assets/forward.fill.png')"></span></button>
+          </div>
+          <figcaption>NORMAL AND EXTENDED</figcaption>
+        </figure>
+        <figure>
+          <div class="cluster tight">
+            <button class="btn bounce-left" type="button" data-bounce aria-label="Previous track"><span class="icon" style="--symbol:url('assets/backward.fill.png')"></span></button>
+            <button class="btn primary" type="button" data-play aria-label="Pause"><span class="sym"><span class="icon" style="--symbol:url('assets/pause.fill.png')"></span><span class="icon" data-off style="--symbol:url('assets/play.fill.png')"></span></span></button>
+            <button class="btn bounce-right" type="button" data-bounce aria-label="Next track"><span class="icon" style="--symbol:url('assets/forward.fill.png')"></span></button>
+          </div>
+          <figcaption>MINI · 32 PT, GAP 4</figcaption>
+        </figure>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-fire="play">Toggle play / pause</button>
+        <button class="ghost" type="button" data-fire="bounce">Press next</button>
+        <span class="state">Both clusters are live — click the buttons directly.</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td colspan="2"><b>PLAY ↔ PAUSE · .replace</b></td></tr>
+          <tr><td>0 ms</td><td>The outgoing glyph scales 1 → 0.55 and fades out over 150 ms.</td></tr>
+          <tr><td>75 ms</td><td>The incoming glyph scales 0.55 → 1 and fades in over 175 ms, with a small overshoot as it lands.</td></tr>
+          <tr><td>250 ms</td><td>Done. The overlap is what makes it one symbol changing rather than two symbols swapping.</td></tr>
+          <tr><td colspan="2"><b>PREVIOUS / NEXT · .bounce</b></td></tr>
+          <tr><td>0 ms</td><td>Glyph starts moving in its own direction — previous shifts 3 pt left, next 3 pt right — while scaling to 1.10.</td></tr>
+          <tr><td>84 ms</td><td>Peak of the throw.</td></tr>
+          <tr><td>220 ms</td><td>Back to rest. The track has already changed; this only confirms the press landed.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Replace <code>250 ms</code> total (150 out, 175 in, 75 overlap). Bounce <code>220 ms</code>.</dd>
+        <dt>EASING</dt><dd>Out <code>cubic-bezier(.4, 0, 1, 1)</code>; in <code>cubic-bezier(.2, 1.1, .4, 1)</code>; bounce <code>cubic-bezier(.4, 0, .2, 1)</code>.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0.4, 0, 1, 1)</code> and <code>(0.4, 0, 0.2, 1)</code>. The incoming overshoot is what SF Symbols produces internally; if hand-rolled it is <code>CASpringAnimation(mass: 1, stiffness: 400, damping: 24)</code>.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">The button frame, its 48 pt green circle, its background and its position. Only the glyph inside moves — the target your pointer is over never shifts under it. Previous and next do not react when play is pressed.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api"><code>imageView.setSymbolImage(_:contentTransition: .replace.downUp)</code> for play / pause; <code>imageView.addSymbolEffect(.bounce.up, options: .nonRepeating)</code> for previous / next. Both are system effects — no CALayer work and no timing values to maintain.</dd>
+        <dt>REDUCE MOTION</dt><dd>SF Symbols honours the system setting itself: <code>.replace</code> becomes an instant image swap and <code>.bounce</code> does not play. The state change is never lost, only the transition.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 04 · SEEK AND VOLUME ═════════════════════════════════════ -->
+<section class="feature" id="f-sliders">
+  <div class="feature-head">
+    <span class="no">04</span>
+    <hgroup>
+      <h2>Seek and volume</h2>
+      <p>While a finger is down there is no animation at all — the thumb is under the pointer, 1:1, or
+        the control feels broken. The only motion is at the two edges: picking up, and letting go.</p>
+    </hgroup>
+    <span class="tag">NSSLIDER</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>SEEK · 296 PT TRACK · VOLUME · 64 PT TRACK</h3>
+      <div class="bench">
+        <figure>
+          <div class="seek-demo">
+            <span class="elapsed">1:24</span>
+            <div class="slider" data-slider="seek" role="slider" tabindex="0" aria-label="Seek in current track" aria-valuemin="0" aria-valuemax="337" aria-valuenow="84">
+              <div class="rail"><i></i></div><div class="thumb"></div>
+            </div>
+            <span>5:37</span>
+          </div>
+          <figcaption>SEEK · ELAPSED COUNTS IN TABULAR FIGURES</figcaption>
+        </figure>
+        <figure>
+          <div class="vol-demo">
+            <span class="icon" style="--symbol:url('assets/speaker.wave.2.fill.png')"></span>
+            <div class="slider" data-slider="volume" role="slider" tabindex="0" aria-label="Playback volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="65">
+              <div class="rail"><i></i></div><div class="thumb"></div>
+            </div>
+          </div>
+          <figcaption>VOLUME · 0…100</figcaption>
+        </figure>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-fire="scrub">Scripted drag and release</button>
+        <button class="ghost" type="button" data-fire="tick" aria-pressed="true">Elapsed is counting</button>
+        <span class="state" data-state="seek">Drag either thumb — the demo is live.</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td>0 ms</td><td><b>Pick up.</b> The thumb scales 1 → 1.25 over 120 ms. Nothing else. It is now bigger than your pointer's precision, which is the point.</td></tr>
+          <tr><td>while down</td><td><b>Drag.</b> Thumb and filled track follow the pointer with <em>zero</em> transition. Any easing here reads as lag.</td></tr>
+          <tr><td>while down</td><td>The elapsed label updates per frame, in tabular figures so the digits never reflow the row.</td></tr>
+          <tr><td>0 ms</td><td><b>Release.</b> The thumb settles 1.25 → 1 over 160 ms with a slight overshoot. Playback position commits here, not during the drag.</td></tr>
+          <tr><td>1 s tick</td><td><b>Playing.</b> The filled track advances once a second with no animation, matched to the label. A continuously animating progress bar on an always-on-top panel is a distraction you cannot escape.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Pick up <code>120 ms</code> · drag <code>0 ms</code> · release <code>160 ms</code> · playback tick <code>1000 ms</code>, unanimated.</dd>
+        <dt>EASING</dt><dd>Pick up <code>cubic-bezier(0, 0, .2, 1)</code>; release <code>cubic-bezier(.22, 1.1, .36, 1)</code>.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code> on pick up; release is a <code>CASpringAnimation(mass: 1, stiffness: 320, damping: 26)</code> on <code>transform.scale</code>.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">The track, its 3 pt height, both time labels' positions and the whole row around it. The elapsed label's width is fixed by tabular figures, so <code>9:59</code> → <code>10:00</code> does not shove the track sideways.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api">A custom <code>NSSliderCell</code> drawing the knob through a <code>CALayer</code>; the scale is a <code>CASpringAnimation</code> driven from <code>startTracking</code> / <code>stopTracking</code>. The elapsed label is an ordinary <code>NSTextField</code> with <code>monospacedDigitSystemFont</code> — no animation.</dd>
+        <dt>REDUCE MOTION</dt><dd>The thumb jumps to its larger size on pick up and back on release. Drag behaviour is unchanged, because it was never an animation.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 05 · SHUFFLE AND REPEAT ══════════════════════════════════ -->
+<section class="feature" id="f-modes">
+  <div class="feature-head">
+    <span class="no">05</span>
+    <hgroup>
+      <h2>Shuffle and repeat</h2>
+      <p>Turning something on is a press to acknowledge plus a colour that stays. Repeat has a third
+        state, and that one is a different symbol — so it gets a replace, not another bounce.</p>
+    </hgroup>
+    <span class="tag">SF SYMBOLS</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>PLAYBACK MODES · 24 PT, BETWEEN HAIRLINES</h3>
+      <div class="bench">
+        <figure>
+          <div class="cluster divided">
+            <button class="btn small tintable bounce-up" type="button" data-toggle="shuffle" aria-pressed="false" aria-label="Shuffle off"><span class="icon" style="--symbol:url('assets/shuffle.png')"></span></button>
+            <button class="btn small tintable bounce-up" type="button" data-repeat="off" aria-label="Repeat off"><span class="sym s24"><span class="icon" style="--symbol:url('assets/repeat.png')"></span><span class="icon" data-off style="--symbol:url('assets/repeat.1.png')"></span></span></button>
+          </div>
+          <figcaption>AS THEY SIT IN THE BOTTOM STRIP</figcaption>
+        </figure>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-fire="shuffle">Toggle shuffle</button>
+        <button class="ghost" type="button" data-fire="repeat">Advance repeat</button>
+        <span class="state" data-state="repeat">shuffle off · repeat off</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td colspan="2"><b>OFF → ON</b></td></tr>
+          <tr><td>0 ms</td><td><b>Bounce.</b> The glyph rises 2.5 pt and scales to 1.14.</td></tr>
+          <tr><td>0 ms</td><td><b>Tint, in parallel.</b> Colour crosses from <code>.secondaryLabelColor</code> to <code>.systemGreen</code> over 180 ms. The bounce is the press; the colour is the state.</td></tr>
+          <tr><td>220 ms</td><td>Rest. The green stays — it is the only thing that tells you shuffle is on.</td></tr>
+          <tr><td colspan="2"><b>REPEAT ALL → REPEAT ONE</b></td></tr>
+          <tr><td>0 ms</td><td><code>repeat</code> scales down and out over 150 ms. <b>No bounce</b> — nothing is being switched on, the mode is being refined.</td></tr>
+          <tr><td>75 ms</td><td><code>repeat.1</code> scales up and in over 175 ms. Already green, so no tint either.</td></tr>
+          <tr><td colspan="2"><b>REPEAT ONE → OFF</b></td></tr>
+          <tr><td>0 ms</td><td>Replace back to <code>repeat</code>, 250 ms, while the colour returns to secondary over 180 ms.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Bounce <code>220 ms</code> · tint <code>180 ms</code> · replace <code>250 ms</code>. Bounce and tint start together.</dd>
+        <dt>EASING</dt><dd>Bounce <code>cubic-bezier(.4, 0, .2, 1)</code> · tint <code>cubic-bezier(0, 0, .2, 1)</code> · replace as in 03.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)</code> for the bounce, <code>(0, 0, 0.2, 1)</code> for the colour.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">The two hairline rules bracketing the cluster, the 8 pt gap, and the other button. Toggling shuffle must not make repeat twitch — they are neighbours, not a group.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api"><code>addSymbolEffect(.bounce.up, options: .nonRepeating)</code> on enable; <code>setSymbolImage(_:contentTransition: .replace.downUp)</code> for <code>repeat</code> → <code>repeat.1</code>; the tint is <code>contentTintColor</code> animated through <code>NSAnimationContext</code>.</dd>
+        <dt>REDUCE MOTION</dt><dd>No bounce, no replace transition — the glyph and the colour both change in place. The colour is doing the real work here, and the colour is not motion.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 06 · LIKE ════════════════════════════════════════════════ -->
+<section class="feature" id="f-like">
+  <div class="feature-head">
+    <span class="no">06</span>
+    <hgroup>
+      <h2>Like</h2>
+      <p>The one place a bounce is allowed to feel good. Same effect on the panel and in a library row,
+        because it is the same action — and the row must not move while you tap its heart.</p>
+    </hgroup>
+    <span class="tag">SF SYMBOLS</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>PANEL EXTRAS · 24 PT &nbsp;·&nbsp; LIBRARY ROW · 40 PT HIGH</h3>
+      <div class="bench" style="flex-direction:column;gap:22px">
+        <figure>
+          <div class="cluster">
+            <button class="btn small tintable bounce-up" type="button" data-like="panel" aria-pressed="false" aria-label="Like current track"><span class="sym s24"><span class="icon" style="--symbol:url('assets/heart.png')"></span><span class="icon" data-off style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+            <button class="btn small" type="button" aria-label="Choose playback device"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span></button>
+            <span class="m-vol"><span class="icon" style="--symbol:url('assets/speaker.wave.2.fill.png')"></span><span class="rail"><i style="width:65%"></i></span></span>
+          </div>
+          <figcaption>ON THE PANEL</figcaption>
+        </figure>
+        <figure>
+          <div class="lib-row">
+            <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""></span>
+            <span class="row-title">Instant Crush</span>
+            <span class="artist">Daft Punk</span>
+            <span class="duration">5:37</span>
+            <button class="btn row-heart bounce-up" type="button" data-like="row" aria-pressed="false" aria-label="Add Instant Crush to Liked Songs"><span class="sym s24"><span class="icon" style="--symbol:url('assets/heart.png')"></span><span class="icon" data-off style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+          </div>
+          <figcaption>IN A LIBRARY ROW</figcaption>
+        </figure>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-fire="like">Like on both surfaces</button>
+        <span class="state" data-state="like">not liked</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td>0 ms</td><td><b>Replace begins.</b> <code>heart</code> scales down and out over 150 ms.</td></tr>
+          <tr><td>0 ms</td><td><b>Tint begins, in parallel.</b> Secondary → <code>.systemGreen</code> over 180 ms. In the row the heart also goes from 60% to 100% opacity on the same curve.</td></tr>
+          <tr><td>75 ms</td><td><code>heart.fill</code> scales up and in over 175 ms, overshooting as it lands.</td></tr>
+          <tr><td>75 ms</td><td><b>Bounce rides on top</b> of the arriving glyph: 2.5 pt rise, scale 1.14, 220 ms. This is the only purely expressive motion in the product, and it is one gesture long.</td></tr>
+          <tr><td>295 ms</td><td>Rest, filled and green.</td></tr>
+          <tr><td>unliking</td><td>Same shape in reverse — replace back to the outline, colour returns — but <b>no bounce</b>. Removing something should not celebrate.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Replace <code>250 ms</code> · tint <code>180 ms</code> · bounce <code>220 ms</code> starting at 75 ms. Total <code>295 ms</code>.</dd>
+        <dt>EASING</dt><dd>Replace as in 03 · tint <code>cubic-bezier(0, 0, .2, 1)</code> · bounce <code>cubic-bezier(.4, 0, .2, 1)</code>.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code> and <code>(0.4, 0, 0.2, 1)</code>.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">The library row's height, fill, title and artist — liking a track must never be mistaken for selecting or playing it. The row does not highlight, lift or reorder, and the Liked Songs list is not re-sorted under the pointer. On the panel, the device button and volume slider beside the heart do not shift.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api"><code>setSymbolImage(_:contentTransition: .replace.downUp)</code> plus <code>addSymbolEffect(.bounce.up, options: .nonRepeating)</code>, with <code>contentTintColor</code> animated through <code>NSAnimationContext</code>. In the table, the cell view is reused — <code>NSTableView.reloadData</code> is never called for a like.</dd>
+        <dt>REDUCE MOTION</dt><dd>Instant glyph swap and instant colour. The heart is filled and green the moment you release; nothing about the outcome depends on the bounce.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 07 · DEVICE PICKER ═══════════════════════════════════════ -->
+<section class="feature" id="f-device">
+  <div class="feature-head">
+    <span class="no">07</span>
+    <hgroup>
+      <h2>Device picker</h2>
+      <p>A popover has one job on open: say where it came from. It grows out of the button that
+        summoned it, so the corner nearest the button never moves.</p>
+    </hgroup>
+    <span class="tag">NSPOPOVER</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>POPOVER · 184 PT WIDE, ANCHORED TO THE SPEAKER BUTTON</h3>
+      <div class="bench">
+        <div class="pop-host">
+          <div class="popover" id="dev-pop" role="menu" aria-label="Play on a device">
+            <strong>Play on a device</strong>
+            <button class="device-option on" type="button" data-device="This Mac" role="menuitemradio" aria-checked="true"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span><span>This Mac</span><span class="icon check" style="--symbol:url('assets/checkmark.png')"></span></button>
+            <button class="device-option" type="button" data-device="Living room" role="menuitemradio" aria-checked="false"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span><span>Living room</span><span class="icon check" style="--symbol:url('assets/checkmark.png')"></span></button>
+          </div>
+          <button class="btn small tintable" type="button" data-pop aria-expanded="false" aria-label="Choose playback device"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span></button>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-fire="pop">Open and close</button>
+        <span class="state" data-state="device">closed · playing on This Mac</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td colspan="2"><b>OPEN</b></td></tr>
+          <tr><td>0 ms</td><td>The popover scales 0.92 → 1 from its bottom-right corner — the corner touching the button — while rising 6 pt and fading in. 200 ms.</td></tr>
+          <tr><td>0 ms</td><td>The speaker button tints to <code>.systemGreen</code> over 180 ms, so it is visibly the thing holding the popover open.</td></tr>
+          <tr><td>200 ms</td><td>Open. No row stagger inside: two rows do not need choreography, and a menu should be readable the instant it stops.</td></tr>
+          <tr><td colspan="2"><b>CLOSE</b></td></tr>
+          <tr><td>0 ms</td><td>Scale 1 → 0.92 back toward the same corner, 6 pt drop, fade out. 150 ms — 75% of the entrance.</td></tr>
+          <tr><td>150 ms</td><td>Gone. If a device was chosen, the checkmark moved before the close began, so the choice is visible on the way out.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Open <code>200 ms</code> · close <code>150 ms</code> · button tint <code>180 ms</code> · checkmark <code>180 ms</code>.</dd>
+        <dt>EASING</dt><dd>Open opacity <code>cubic-bezier(0, 0, .2, 1)</code>, open transform <code>cubic-bezier(.32, .72, 0, 1)</code>; close <code>cubic-bezier(.4, 0, 1, 1)</code>.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)</code> on open, <code>(0.4, 0, 1, 1)</code> on close.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">The anchor corner — it is the fixed point the whole transform is built around. The panel underneath does not dim, blur or shift, because the popover is a sibling window, not a modal.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api"><code>NSPopover</code> with <code>behavior = .transient</code>, shown from <code>show(relativeTo:of:preferredEdge:)</code>. AppKit animates the appearance itself when <code>animates = true</code>; the values above describe what it produces, and match it if the popover is replaced by a custom child <code>NSWindow</code> with a <code>CABasicAnimation</code> on <code>transform.scale</code> and <code>opacity</code>.</dd>
+        <dt>REDUCE MOTION</dt><dd>The popover appears and disappears with no scale and no fade. Set <code>animates = false</code> when <code>NSWorkspace.shared.accessibilityDisplayShouldReduceMotion</code> is true.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 08 · QUEUE ═══════════════════════════════════════════════ -->
+<section class="feature" id="f-queue">
+  <div class="feature-head">
+    <span class="no">08</span>
+    <hgroup>
+      <h2>Queue</h2>
+      <p>Extended mode adds 224 pt under the panel. The section is revealed by the window growing
+        around it — the rows are already there, waiting — and then they arrive in reading order.</p>
+    </hgroup>
+    <span class="tag">NSWINDOW + NSTABLEVIEW</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>NORMAL → EXTENDED · 440 × 188 → 440 × 412</h3>
+      <div class="scene" style="height:500px">
+        <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+        <div class="shell" id="queue-shell" data-mode="normal" data-side="right" data-vertical="bottom">
+          <div class="morph hud" data-mode="normal">
+            <img class="ml m-art art" src="assets/album.svg" width="640" height="640" alt="Random Access Memories album artwork">
+            <div class="ml m-meta">
+              <span class="track-title">Instant Crush</span>
+              <span class="artist">Daft Punk</span>
+            </div>
+            <div class="ml m-strip"></div>
+            <div class="ml m-seek"><span>1:24</span><div class="rail"><i style="width:25%"></i></div><span>5:37</span></div>
+            <div class="ml m-transport">
+              <button class="btn bounce-left" type="button" data-bounce aria-label="Previous track"><span class="icon" style="--symbol:url('assets/backward.fill.png')"></span></button>
+              <button class="btn m-play" type="button" data-play aria-label="Pause"><span class="sym"><span class="icon" style="--symbol:url('assets/pause.fill.png')"></span><span class="icon" data-off style="--symbol:url('assets/play.fill.png')"></span></span></button>
+              <button class="btn bounce-right" type="button" data-bounce aria-label="Next track"><span class="icon" style="--symbol:url('assets/forward.fill.png')"></span></button>
+            </div>
+            <div class="ml m-modes">
+              <button class="btn small tintable bounce-up" type="button" data-toggle="shuffle" aria-pressed="false" aria-label="Shuffle off"><span class="icon" style="--symbol:url('assets/shuffle.png')"></span></button>
+              <button class="btn small tintable bounce-up" type="button" data-repeat="off" aria-label="Repeat off"><span class="sym s24"><span class="icon" style="--symbol:url('assets/repeat.png')"></span><span class="icon" data-off style="--symbol:url('assets/repeat.1.png')"></span></span></button>
+            </div>
+            <div class="ml m-extras">
+              <button class="btn small tintable bounce-up" type="button" data-like="panel" aria-pressed="false" aria-label="Like current track"><span class="sym s24"><span class="icon" style="--symbol:url('assets/heart.png')"></span><span class="icon" data-off style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+              <button class="btn small" type="button" aria-label="Choose playback device"><span class="icon" style="--symbol:url('assets/hifispeaker.png')"></span></button>
+              <span class="m-vol"><span class="icon" style="--symbol:url('assets/speaker.wave.2.fill.png')"></span><span class="rail"><i style="width:65%"></i></span></span>
+            </div>
+            <div class="ml m-queue">
+              <div class="q-head"><b>Up next</b><span>From Random Access Memories</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Lose Yourself to Dance</span><span class="artist">Daft Punk</span></div><span class="duration">5:53</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Giorgio by Moroder</span><span class="artist">Daft Punk</span></div><span class="duration">9:04</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Give Life Back to Music</span><span class="artist">Daft Punk</span></div><span class="duration">4:34</span></div>
+              <div class="q-row"><img src="assets/album.svg" width="640" height="640" alt=""><div><span class="track-title">Within</span><span class="artist">Daft Punk</span></div><span class="duration">3:48</span></div>
+            </div>
+          </div>
+          <button class="orb mode-orb" type="button" data-cycle aria-label="Change player mode"><span class="icon" style="--symbol:url('assets/arrow.up.left.and.arrow.down.right.png')"></span></button>
+          <div class="win-orbs">
+            <button class="orb" type="button" aria-label="Open library"><span class="icon" style="--symbol:url('assets/books.vertical.png')"></span></button>
+            <button class="orb" type="button" aria-label="Hide overlay"><span class="icon" style="--symbol:url('assets/xmark.png')"></span></button>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-queue="toggle">Reveal / hide the queue</button>
+        <span class="state" data-state="queue">normal · queue hidden</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td>0 ms</td><td><b>The window grows downward</b> 188 → 412 pt over 280 ms. The top edge is pinned, so the panel appears to unfold rather than jump.</td></tr>
+          <tr><td>0 ms</td><td>The queue's hairline top border and its 32 pt “Up next” header are uncovered as the frame passes them. They are not animated — they are simply revealed.</td></tr>
+          <tr><td>0 ms</td><td>The bottom strip's corner radius goes 16 → 0, because it is no longer the bottom of the window.</td></tr>
+          <tr><td>120 ms</td><td><b>Row 1</b> fades in and rises 8 pt, 180 ms. It starts while the frame is still moving — the queue should feel like it was already there.</td></tr>
+          <tr><td>160 / 200 / 240</td><td><b>Rows 2, 3, 4</b> at 40 ms apart. Enough to read as top-to-bottom order, short enough that the whole list is settled before you look down.</td></tr>
+          <tr><td>420 ms</td><td>Last row lands. Total 420 ms, of which only 280 ms is window motion.</td></tr>
+          <tr><td>collapse</td><td>Frame shrinks over 280 ms; rows do <b>not</b> stagger out. Leaving is not an event.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Frame <code>280 ms</code> · row <code>180 ms</code> each · stagger <code>40 ms</code> · first row delayed <code>120 ms</code>. Total <code>420 ms</code>.</dd>
+        <dt>EASING</dt><dd>Frame <code>cubic-bezier(.32, .72, 0, 1)</code> · rows <code>cubic-bezier(0, 0, .2, 1)</code>.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)</code> for the frame, <code>(0, 0, 0.2, 1)</code> for the rows.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">Everything above the queue. The artwork, title, seek bar and transport do not move by a point when the queue appears — that is the whole reason the window grows downward instead of recentring. The queue rows' own artwork, text and durations never animate individually.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api"><code>NSWindow.setFrame(_:display:animate:)</code> with the origin adjusted to preserve the top edge. Rows are <code>NSTableRowView</code>s whose <code>animator().alphaValue</code> and layer <code>transform</code> are set inside a <code>NSAnimationContext</code> group with a per-row <code>CAAnimation.beginTime</code> offset.</dd>
+        <dt>REDUCE MOTION</dt><dd>The window resizes without animation and all four rows are at full opacity from the first frame. The queue is either there or not there.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 09 · LIBRARY WINDOW ══════════════════════════════════════ -->
+<section class="feature wide" id="f-library">
+  <div class="feature-head">
+    <span class="no">09</span>
+    <hgroup>
+      <h2>Library window</h2>
+      <p>A separate, focusable 800 × 500 window — so it is allowed to behave like one. Opening,
+        searching, selecting and starting a track are four different events and each gets a different
+        amount of motion, in that order.</p>
+    </hgroup>
+    <span class="tag">NSWINDOW + NSTABLEVIEW</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>LIBRARY · 800 × 500, RESIZABLE, MINIMUM 680 × 360</h3>
+      <div class="scene lib-scene">
+        <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+        <div class="library hud open" id="library">
+          <div class="library-top">
+            <div class="library-brand"><div class="logo-slot" data-size="22"></div><em>mini<i>tify</i></em></div>
+            <label class="search">
+              <span class="icon" style="--symbol:url('assets/magnifyingglass.png')"></span>
+              <input type="search" id="lib-search" aria-label="Search tracks" placeholder="Search tracks or artists">
+            </label>
+            <button class="btn" type="button" data-lib="close" aria-label="Close library"><span class="icon" style="--symbol:url('assets/xmark.png')" ></span></button>
+          </div>
+          <div class="library-body">
+            <aside class="sidebar">
+              <button class="selected" type="button"><span class="liked-cover"><span class="icon" style="--symbol:url('assets/heart.fill.png')"></span></span><span class="sidebar-label"><b>Liked Songs</b><small>3 saved tracks</small></span></button>
+              <div class="playlist-divider"></div>
+              <h3>YOUR PLAYLISTS</h3>
+              <button type="button"><img class="sidebar-cover" src="assets/album.svg" width="640" height="640" alt=""><span class="sidebar-label"><b>Evening rotation</b><small>3 tracks</small></span></button>
+              <button type="button"><img class="sidebar-cover" src="assets/album.svg" width="640" height="640" alt=""><span class="sidebar-label"><b>Deep focus</b><small>3 tracks</small></span></button>
+            </aside>
+            <div class="tracks-pane">
+              <div class="collection-header">
+                <img class="cover" src="assets/album.svg" width="640" height="640" alt="Random Access Memories collection artwork">
+                <div>
+                  <span class="collection-kicker">YOUR COLLECTION</span>
+                  <h3 class="collection-title">Random Access Memories</h3>
+                  <p class="collection-facts">6 tracks · 56 min 17 sec</p>
+                </div>
+              </div>
+              <div class="table-head"><span></span><span>Title</span><span>Artist</span><span>Time</span><span></span></div>
+              <div class="library-scroll">
+                <div class="track-list" id="track-list">
+                  <div class="lib-row playing selected" data-row data-title="Instant Crush" data-artist="Daft Punk">
+                    <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""><span class="eq live" role="img" aria-label="Currently playing"><i></i><i></i><i></i></span></span>
+                    <span class="row-title">Instant Crush</span><span class="artist">Daft Punk</span><span class="duration">5:37</span>
+                    <button class="btn row-heart on bounce-up" type="button" data-like="lib" aria-pressed="true" aria-label="Remove Instant Crush from Liked Songs"><span class="sym s24"><span class="icon" data-off style="--symbol:url('assets/heart.png')"></span><span class="icon" style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+                  </div>
+                  <div class="lib-row" data-row data-title="Lose Yourself to Dance" data-artist="Daft Punk">
+                    <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""></span>
+                    <span class="row-title">Lose Yourself to Dance</span><span class="artist">Daft Punk</span><span class="duration">5:53</span>
+                    <button class="btn row-heart bounce-up" type="button" data-like="lib" aria-pressed="false" aria-label="Add Lose Yourself to Dance to Liked Songs"><span class="sym s24"><span class="icon" style="--symbol:url('assets/heart.png')"></span><span class="icon" data-off style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+                  </div>
+                  <div class="lib-row" data-row data-title="Giorgio by Moroder" data-artist="Daft Punk">
+                    <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""></span>
+                    <span class="row-title">Giorgio by Moroder</span><span class="artist">Daft Punk</span><span class="duration">9:04</span>
+                    <button class="btn row-heart on bounce-up" type="button" data-like="lib" aria-pressed="true" aria-label="Remove Giorgio by Moroder from Liked Songs"><span class="sym s24"><span class="icon" data-off style="--symbol:url('assets/heart.png')"></span><span class="icon" style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+                  </div>
+                  <div class="lib-row" data-row data-title="Give Life Back to Music" data-artist="Daft Punk">
+                    <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""></span>
+                    <span class="row-title">Give Life Back to Music</span><span class="artist">Daft Punk</span><span class="duration">4:34</span>
+                    <button class="btn row-heart bounce-up" type="button" data-like="lib" aria-pressed="false" aria-label="Add Give Life Back to Music to Liked Songs"><span class="sym s24"><span class="icon" style="--symbol:url('assets/heart.png')"></span><span class="icon" data-off style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+                  </div>
+                  <div class="lib-row" data-row data-title="Within" data-artist="Daft Punk">
+                    <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""></span>
+                    <span class="row-title">Within</span><span class="artist">Daft Punk</span><span class="duration">3:48</span>
+                    <button class="btn row-heart on bounce-up" type="button" data-like="lib" aria-pressed="true" aria-label="Remove Within from Liked Songs"><span class="sym s24"><span class="icon" data-off style="--symbol:url('assets/heart.png')"></span><span class="icon" style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+                  </div>
+                  <div class="lib-row" data-row data-title="Motherboard" data-artist="Daft Punk">
+                    <span class="row-art"><img src="assets/album.svg" width="640" height="640" alt=""></span>
+                    <span class="row-title">Motherboard</span><span class="artist">Daft Punk</span><span class="duration">5:41</span>
+                    <button class="btn row-heart bounce-up" type="button" data-like="lib" aria-pressed="false" aria-label="Add Motherboard to Liked Songs"><span class="sym s24"><span class="icon" style="--symbol:url('assets/heart.png')"></span><span class="icon" data-off style="--symbol:url('assets/heart.fill.png')"></span></span></button>
+                  </div>
+                </div>
+                <div class="lib-empty" id="lib-empty"><span class="icon" style="--symbol:url('assets/magnifyingglass.png')"></span><strong>No matching tracks</strong><p>Try another title or artist, or clear your search.</p></div>
+                <p class="list-end" id="list-end">All 6 tracks shown · Hearts keep this collection yours.</p>
+              </div>
+              <div class="library-now">
+                <img src="assets/album.svg" width="640" height="640" alt="">
+                <div><span>NOW PLAYING</span><strong id="now-title">Instant Crush <small>· Daft Punk</small></strong></div>
+                <span class="eq live" role="img" aria-label="Currently playing"><i></i><i></i><i></i></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-lib="open">Open the library</button>
+        <button class="ghost" type="button" data-lib="close">Close it</button>
+        <button class="ghost" type="button" data-fire="filter">Type “within” into search</button>
+        <button class="ghost" type="button" data-fire="clear">Clear search</button>
+        <button class="ghost" type="button" data-fire="select">Select next row</button>
+        <button class="ghost" type="button" data-fire="start">Start selected row</button>
+        <span class="state" data-state="library">open · Instant Crush playing</span>
+      </div>
+    </div>
+    <div class="spec-row">
+      <div class="spec">
+        <h3>BEAT MAP · WINDOW AND SEARCH</h3>
+        <table class="beatmap">
+          <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2"><b>OPEN</b></td></tr>
+            <tr><td>0 ms</td><td>The window scales 0.94 → 1 from its own centre and fades in, 240 ms. Longer than a popover because it is a real window you are about to work in.</td></tr>
+            <tr><td>240 ms</td><td>Open and key. The search field takes focus; the caret appearing is the only thing still moving.</td></tr>
+            <tr><td colspan="2"><b>CLOSE</b></td></tr>
+            <tr><td>0 ms</td><td>Scale 1 → 0.94, fade out, 180 ms — 75% of the entrance. Playback is untouched; closing the library is not stopping the music.</td></tr>
+            <tr><td colspan="2"><b>SEARCH FILTERING</b></td></tr>
+            <tr><td>0 ms</td><td><b>Non-matching rows fade out</b> over 150 ms, in place. They do not slide sideways or collapse yet.</td></tr>
+            <tr><td>0 ms</td><td><b>Their height collapses</b> to zero over 200 ms, so the remaining rows glide up rather than snapping.</td></tr>
+            <tr><td>200 ms</td><td>Settled. Per keystroke — which means at speed the list is continuously re-settling, so the curve has to be forgiving rather than snappy.</td></tr>
+            <tr><td>empty</td><td>If nothing matches, the empty state appears with a 150 ms fade only. No illustration animating in.</td></tr>
+          </tbody>
+        </table>
+        <dl class="facts">
+          <dt>DURATION</dt><dd>Open <code>240 ms</code> · close <code>180 ms</code> · row fade <code>150 ms</code> · reflow <code>200 ms</code>.</dd>
+          <dt>EASING</dt><dd>Open <code>cubic-bezier(.32, .72, 0, 1)</code> · close <code>cubic-bezier(.4, 0, 1, 1)</code> · row fade <code>cubic-bezier(.4, 0, 1, 1)</code> · reflow <code>cubic-bezier(.32, .72, 0, 1)</code>.</dd>
+          <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)</code> and <code>(0.4, 0, 1, 1)</code>.</dd>
+          <dt class="still">STAYS STILL</dt><dd class="still">During search: the sidebar, the collection header, the column headings and the now-playing footer. Only the row list reflows. The window never resizes to fit fewer results.</dd>
+          <dt class="api">NATIVE API</dt><dd class="api">Window: <code>NSWindow</code> with a <code>CABasicAnimation</code> group on <code>transform.scale</code> and <code>opacity</code> (<code>animationBehavior = .none</code> so the system default does not fight it). Filtering: <code>NSTableView.beginUpdates()</code> / <code>removeRows(at:withAnimation: [.effectFade, .slideUp])</code> / <code>endUpdates()</code> — AppKit owns the reflow.</dd>
+          <dt>REDUCE MOTION</dt><dd>The window appears and disappears at full size and opacity. Rows are removed with <code>withAnimation: []</code>, so the list updates between frames.</dd>
+        </dl>
+      </div>
+      <div class="spec">
+        <h3>BEAT MAP · SELECT, START, EQUALISER</h3>
+        <table class="beatmap">
+          <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2"><b>SELECTING A ROW</b></td></tr>
+            <tr><td>0 ms</td><td>The row's fill crosses to the selected fill and its inset border goes 0.5 → 1 pt, 120 ms. The previously selected row releases on the same clock.</td></tr>
+            <tr><td>120 ms</td><td>Done. Selection is navigation, not an event — it gets the shortest duration in the product.</td></tr>
+            <tr><td colspan="2"><b>STARTING A ROW</b></td></tr>
+            <tr><td>0 ms</td><td><b>Title crosses to <code>.systemGreen</code></b> over 180 ms. The previous playing row's title returns to label colour on the same curve, so the green visibly moves between two rows.</td></tr>
+            <tr><td>0 ms</td><td><b>The equaliser badge fades in</b> over 180 ms on the new row's artwork, bottom-right, and fades out on the old one.</td></tr>
+            <tr><td>0 ms</td><td>The now-playing footer's title does a <code>.replace</code>-shaped crossfade, 250 ms, matching the panel.</td></tr>
+            <tr><td colspan="2"><b>THE EQUALISER</b></td></tr>
+            <tr><td>loop</td><td>Three 2 pt bars, heights cycling between 4 and 14 pt. Each bar runs its own period — 1100 / 858 / 1012 ms — so they never fall into step and never read as a progress meter.</td></tr>
+            <tr><td>paused</td><td>The animation holds on its current frame at 45% opacity. It does not reset to a resting pose: the music is paused, not stopped.</td></tr>
+          </tbody>
+        </table>
+        <dl class="facts">
+          <dt>DURATION</dt><dd>Select <code>120 ms</code> · start <code>180 ms</code> · footer <code>250 ms</code> · equaliser <code>1100 / 858 / 1012 ms</code>, looping.</dd>
+          <dt>EASING</dt><dd>Select and start <code>cubic-bezier(0, 0, .2, 1)</code> · equaliser <code>cubic-bezier(.4, 0, .2, 1)</code>.</dd>
+          <dt class="api">CORE ANIM.</dt><dd class="api"><code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code>; the equaliser is <code>(0.4, 0, 0.2, 1)</code> with <code>repeatCount = .infinity</code> and <code>autoreverses = false</code>.</dd>
+          <dt class="still">STAYS STILL</dt><dd class="still">Row height, artwork, artist and duration. Starting a track does not re-sort, scroll or highlight the list — the only things that change are the colour of one title and where the badge sits. The scroll position is never animated on your behalf.</dd>
+          <dt class="api">NATIVE API</dt><dd class="api">Selection is <code>NSTableView</code>'s own <code>selectionHighlightStyle</code>. The title colour and badge are <code>animator().alphaValue</code> / <code>textColor</code> inside <code>NSAnimationContext</code> on the reused cell view. The equaliser is three <code>CALayer</code>s with a <code>CAKeyframeAnimation</code> on <code>bounds.size.height</code>, paused by setting <code>layer.speed = 0</code> rather than removing the animation.</dd>
+          <dt>REDUCE MOTION</dt><dd>Selection and the green title change instantly. <b>The equaliser stops entirely</b> and renders as three static bars at 7 / 12 / 9 pt in a 14 pt box — the same marker the shipping library already draws. A looping animation is exactly what Reduce Motion exists to remove.</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 10 · PANEL DRAG ══════════════════════════════════════════ -->
+<section class="feature" id="f-drag">
+  <div class="feature-head">
+    <span class="no">10</span>
+    <hgroup>
+      <h2>Panel drag</h2>
+      <p>The one gesture where the panel is a physical object. Pick it up and it lifts; move it and it
+        tracks your pointer exactly; push it off the screen and it comes back — with the only spring
+        in the entire system.</p>
+    </hgroup>
+    <span class="tag">CASPRINGANIMATION</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>MINI PANEL · DRAG IT ANYWHERE, INCLUDING OFF THE EDGE</h3>
+      <div class="scene drag-scene" id="drag-scene">
+        <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+        <div class="midline"></div>
+        <div class="shell drag-shell" id="drag-shell" data-mode="mini" data-side="right" data-vertical="bottom">
+          <div class="mini hud">
+            <img class="art" src="assets/album.svg" width="640" height="640" alt="Random Access Memories album artwork">
+            <div class="meta">
+              <span class="track-title">Instant Crush</span>
+              <span class="artist">Daft Punk</span>
+            </div>
+            <div class="cluster tight">
+              <button class="btn bounce-left" type="button" data-bounce aria-label="Previous track"><span class="icon" style="--symbol:url('assets/backward.fill.png')"></span></button>
+              <button class="btn primary" type="button" data-play aria-label="Pause"><span class="sym"><span class="icon" style="--symbol:url('assets/pause.fill.png')"></span><span class="icon" data-off style="--symbol:url('assets/play.fill.png')"></span></span></button>
+              <button class="btn bounce-right" type="button" data-bounce aria-label="Next track"><span class="icon" style="--symbol:url('assets/forward.fill.png')"></span></button>
+            </div>
+          </div>
+          <button class="orb mode-orb" type="button" aria-label="Change player mode"><span class="icon" style="--symbol:url('assets/arrow.up.left.and.arrow.down.right.png')"></span></button>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-fire="throw">Throw it off the edge</button>
+        <button class="ghost" type="button" data-fire="recentre">Put it back</button>
+        <span class="state" data-state="drag">at rest · left of midline · mode button on the right</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td>0 ms</td><td><b>Pick up.</b> Scale 1 → 1.015 and the shadow deepens from 32 pt blur at 31% to 48 pt at 44%, over 120 ms. The panel is now a hair above the desktop.</td></tr>
+          <tr><td>while down</td><td><b>Move.</b> The window origin follows the pointer with no interpolation whatsoever. Lag here is the single most damaging thing a drag can have.</td></tr>
+          <tr><td>on cross</td><td>Crossing the screen midline flips the detached buttons instantly, mid-drag. No animation — see 02.</td></tr>
+          <tr><td>0 ms</td><td><b>Release, in bounds.</b> Scale and shadow return over 160 ms. The panel stays exactly where you left it.</td></tr>
+          <tr><td>0 ms</td><td><b>Release, out of bounds.</b> The window springs back inside <code>visibleFrame</code> over 380 ms, overshooting by roughly 4% before settling. Scale and shadow release in parallel over 160 ms.</td></tr>
+          <tr><td>380 ms</td><td>Settled. The overshoot is the only thing in the product that behaves like mass, and it is here because the panel was genuinely thrown.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Pick up <code>120 ms</code> · drag <code>0 ms</code> · release <code>160 ms</code> · clamp <code>380 ms</code>.</dd>
+        <dt>EASING</dt><dd>Pick up <code>cubic-bezier(0, 0, .2, 1)</code> · release and clamp <code>cubic-bezier(.22, 1.1, .36, 1)</code>.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api">The clamp is a real spring, not a bezier: <code>CASpringAnimation(mass: 1, stiffness: 320, damping: 26, initialVelocity:)</code> on <code>position</code>, seeded with the pointer's release velocity so a hard throw settles differently from a gentle nudge. The bezier above is the fixed-velocity approximation used in this page.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">Everything inside the panel. Artwork, text and transport do not parallax, tilt or lag behind the frame — the panel is one rigid object, not a stack of layers. Playback does not pause, the seek bar keeps advancing, and the detached buttons keep their hover state throughout.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api">Background drag via <code>NSWindow.isMovableByWindowBackground</code>, or <code>performDrag(with:)</code> from <code>mouseDown</code> for full control. The lift is a <code>CABasicAnimation</code> group on <code>transform.scale</code> and <code>shadowOpacity</code> / <code>shadowRadius</code>. The clamp is a <code>CASpringAnimation</code> on the window's content layer <code>position</code>, with the final frame committed through <code>setFrameOrigin</code> on completion.</dd>
+        <dt>REDUCE MOTION</dt><dd>No lift and no spring. The panel still tracks the pointer — that is direct manipulation, not animation — and on release it is clamped into <code>visibleFrame</code> in a single step.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 11 · TERMINAL ════════════════════════════════════════════ -->
+<section class="feature" id="f-terminal">
+  <div class="feature-head">
+    <span class="no">11</span>
+    <hgroup>
+      <h2>Terminal</h2>
+      <p>minitify is launched from a shell, so the shell gets the same mark. No animation API here at
+        all — only characters, written and rewritten. Which is its own discipline: a terminal that
+        scrolls while it loads is a terminal that has lost its place.</p>
+    </hgroup>
+    <span class="tag">STDOUT · ANSI</span>
+  </div>
+  <div class="feature-body">
+    <div class="demo">
+      <h3>BANNER AND LOADING LINE · 80 COLUMNS</h3>
+      <div class="scene" style="height:360px" data-scope="term2">
+        <div class="menubar"><span>Finder　File　Edit　View</span><span>Mon 9:41</span></div>
+        <div class="term">
+          <div class="term-bar"><i></i><i></i><i></i><span>~/projects — zsh</span></div>
+          <pre class="term-body"><span class="term-cmd">❯ minitify play</span><span class="term-banner"></span><span class="term-word">minitify</span><span class="term-load"><b class="term-eq"></b> <span class="term-step"></span><span class="term-caret"></span></span></pre>
+        </div>
+      </div>
+      <div class="controls">
+        <button class="ghost" type="button" data-replay="term2">Replay the print</button>
+        <span class="state" data-state="term2">loading line cycling at 10 fps</span>
+      </div>
+    </div>
+    <div class="spec">
+      <h3>BEAT MAP</h3>
+      <table class="beatmap">
+        <thead><tr><th>TIME</th><th>WHAT MOVES</th></tr></thead>
+        <tbody>
+          <tr><td colspan="2"><b>THE BANNER · PRINTED ONCE</b></td></tr>
+          <tr><td>300 ms</td><td>Row 1 of the M is written, in full-block characters. No fade — a shell does not fade.</td></tr>
+          <tr><td>390 / 480 / 570</td><td>Rows 2, 3, 4, one every 90 ms. Fast enough to feel like output, slow enough to see the M build from the top down.</td></tr>
+          <tr><td>700 ms</td><td>The wordmark settles its letter-spacing from 0.5 em to 0.34 em over 220 ms — the one concession to type, and the only thing on this surface that eases.</td></tr>
+          <tr><td colspan="2"><b>THE LOADING LINE · REDRAWN IN PLACE</b></td></tr>
+          <tr><td>every 100 ms</td><td>Five block glyphs are rewritten on the <em>same line</em> — carriage return, no newline — cycling the mark's eight level-meter frames. 10 fps: fast enough to read as motion, slow enough that each frame is legible.</td></tr>
+          <tr><td>3000 ms</td><td>The meter stops cycling and holds the descending play shape. The line now reads as a result, not a process.</td></tr>
+          <tr><td>per stage</td><td>The label after the bars is rewritten with the same carriage return: <code>Connecting to Spotify…</code> → <code>Ready</code>. The line never grows, so nothing reflows.</td></tr>
+          <tr><td>1060 ms</td><td>The caret blinks on a 1060 ms square wave — the shell's own, not ours.</td></tr>
+        </tbody>
+      </table>
+      <dl class="facts">
+        <dt>DURATION</dt><dd>Banner row <code>90 ms</code> apart · wordmark <code>220 ms</code> · loading frame <code>100 ms</code> · caret <code>1060 ms</code>.</dd>
+        <dt>EASING</dt><dd>None, by definition — characters are discrete. The only curve is on the wordmark: <code>cubic-bezier(0, 0, .2, 1)</code> / <code>CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)</code>, and in a real terminal even that is printed in one step.</dd>
+        <dt class="api">CORE ANIM.</dt><dd class="api">Not applicable. This surface has no layers.</dd>
+        <dt class="still">STAYS STILL</dt><dd class="still">The cursor's line. Every update is a carriage return over a fixed-width field, so the loading line is overwritten rather than appended — the banner above it never scrolls off and the prompt below never jumps. The column count is fixed at 80.</dd>
+        <dt class="api">NATIVE API</dt><dd class="api">Plain <code>print</code> to stdout with <code>\r</code> and ANSI SGR colour. The bar heights come from the same parametric model as the vector mark, quantised to the eight block characters <code>▁▂▃▄▅▆▇█</code>, so the shell and the app are literally drawing the same logo.</dd>
+        <dt>REDUCE MOTION</dt><dd>The loading line is written once in its settled play shape and the stage label is updated in place, with no cycling and no blinking caret. Detect it by checking the terminal is interactive and honouring <code>NO_COLOR</code> / a non-TTY stdout — in a pipe the banner is dropped entirely and only the stage lines are written.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section class="closing">
+  <p><b>What holds across all eleven.</b> Every duration sits in one of four bands, and 150–350 ms
+    covers everything except the launch story. Every curve is one of five, and the only spring is on
+    the drag clamp. Entrances use the enter curve, exits use the exit curve at 60–70% of the
+    entrance duration. Nothing scales, slides or bounces unless it is either showing you where
+    something came from or confirming that a press landed — which is why selecting a library row gets
+    120 ms and a flat colour change, while liking a track gets a bounce.</p>
+  <p><b>What stays still is the design.</b> The panel's top edge through every resize. The artwork,
+    title and transport through every mode switch. The row under your pointer while you tap its
+    heart. The cursor's line in the terminal. Each of those is a decision not to move something, and
+    together they are what keeps a window that floats over your work from feeling like it is
+    competing with it.</p>
+  <p><b>Reduce Motion is a first-class path, not a degradation.</b> SF Symbols effects and
+    <code>NSAnimationContext</code> honour the system setting on their own; the window resizes and
+    the drag clamp need an explicit check of
+    <code>NSWorkspace.shared.accessibilityDisplayShouldReduceMotion</code>. In every case the state
+    change still happens — only the transition is removed, and the looping equaliser is removed
+    outright. Nothing in this page needs a third-party animation library, and nothing in it is
+    carried by JavaScript: on this page the motion is CSS, and in the product it is Core Animation
+    and SF Symbols.</p>
+</section>
+
+<footer>
+  <span>minitify / motion system</span>
+  <span>SF Pro · SF Symbols · .systemGreen · NSVisualEffectView .hudWindow</span>
+  <span>All demos at true size · all values in points</span>
+</footer>
+
+</main>
+
+<script>
+/* ──────────────────────────────────────────────────────────────────
+   No motion lives in here. CSS owns every curve and every duration;
+   this file only flips state, replays a demo and keeps the labels
+   honest. The one exception is the terminal, where the "animation"
+   is literally characters being rewritten.
+   ────────────────────────────────────────────────────────────────── */
+(() => {
+'use strict';
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const root = document.documentElement;
+const reduced = () => root.dataset.reduce === 'on';
+
+/* ── the mark · frozen from the logo lab ───────────────────────── */
+const LOGO = {n:5, w:7, gap:4, r:95, hMax:40, hMin:6, vee:60, counter:45};
+const lgNoise = (i, k) => {const s = Math.sin((i + 1) * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s);};
+const lgStep  = t => 1 - (0.55 * t + 0.45 * (Math.round(t * 2) / 2));
+function lgFraction(beat, i, k){
+  const t = i / (LOGO.n - 1);
+  if (beat === 'play') return (LOGO.hMin + (LOGO.hMax - LOGO.hMin) * lgStep(t)) / LOGO.hMax;
+  if (beat === 'eq')   return (LOGO.hMin + (LOGO.hMax - LOGO.hMin) * lgNoise(i, k)) / LOGO.hMax;
+  const mid = (LOGO.n - 1) / 2;
+  if (i === 0 || i === LOGO.n - 1) return 1;
+  const d = Math.min(i, LOGO.n - 1 - i), ramp = mid > 1 ? (d - 1) / (mid - 1) : 1;
+  return (LOGO.counter + (LOGO.vee - LOGO.counter) * ramp) / 100;
+}
+function lgGeom(beat, i, k){
+  const h = +(lgFraction(beat, i, k) * LOGO.hMax).toFixed(2);
+  return {h, y: +(beat === 'm' ? 32 - LOGO.hMax / 2 : 32 - h / 2).toFixed(2)};
+}
+const lgX = i => +((64 - (LOGO.n * LOGO.w + (LOGO.n - 1) * LOGO.gap)) / 2 + i * (LOGO.w + LOGO.gap)).toFixed(2);
+
+/* EQ → PLAY → EQ → M, the timing agreed in the lab */
+const LG_SCRIPT = [
+  {b:'eq',   k:0, at:0.00, e:'ease-in-out'},
+  {b:'eq',   k:1, at:0.07, e:'ease-in-out'},
+  {b:'eq',   k:2, at:0.14, e:'ease-in-out'},
+  {b:'eq',   k:3, at:0.21, e:'cubic-bezier(.5,0,.2,1)'},
+  {b:'play', k:0, at:0.36, e:'linear'},
+  {b:'play', k:0, at:0.46, e:'cubic-bezier(.55,0,.25,1)'},
+  {b:'eq',   k:5, at:0.58, e:'ease-in-out'},
+  {b:'eq',   k:6, at:0.65, e:'ease-in-out'},
+  {b:'eq',   k:7, at:0.73, e:'cubic-bezier(.4,0,.18,1)'},
+  {b:'m',    k:0, at:0.91, e:'cubic-bezier(.2,1.22,.4,1)'},
+  {b:'m',    k:0, at:1.00}
+];
+
+function logoSvg(size){
+  const rx = +(LOGO.w / 2 * LOGO.r / 100).toFixed(2);
+  const rects = Array.from({length: LOGO.n}, (_, i) => {
+    const g = lgGeom('m', i, 0);
+    return '<rect x="' + lgX(i) + '" y="' + g.y + '" width="' + LOGO.w +
+           '" height="' + g.h + '" rx="' + rx + '" data-i="' + i + '"/>';
+  }).join('');
+  return '<svg class="logo" width="' + size + '" height="' + size +
+         '" viewBox="0 0 64 64" role="img" aria-label="minitify">' + rects + '</svg>';
+}
+$$('.logo-slot').forEach(el => { el.outerHTML = logoSvg(+el.dataset.size || 64); });
+
+/* the four beats, emitted as real CSS keyframes so the browser —
+   not this script — runs them, exactly as Core Animation would */
+let kf = '';
+for (let i = 0; i < LOGO.n; i++){
+  kf += '@keyframes mk' + i + '{';
+  LG_SCRIPT.forEach(s => {
+    const g = lgGeom(s.b, i, s.k);
+    kf += +(s.at * 100).toFixed(3) + '%{height:' + g.h + 'px;y:' + g.y + 'px;' +
+          (s.e ? 'animation-timing-function:' + s.e + ';' : '') + '}';
+  });
+  kf += '}.run .launch-card .logo rect[data-i="' + i + '"]{animation:mk' + i + ' var(--d-logo) both 240ms}';
+}
+document.head.insertAdjacentHTML('beforeend', '<style id="mark-motion">' + kf + '</style>');
+
+/* ── the same mark, quantised for the shell ────────────────────── */
+const BLOCKS = ' ▁▂▃▄▅▆▇█';
+const lgCell = f => BLOCKS[Math.min(8, Math.max(1, Math.round(f * 8)))];
+const lgLine = (beat, k) => Array.from({length: LOGO.n}, (_, i) => lgCell(lgFraction(beat, i, k))).join(' ');
+const lgBanner = () => Array.from({length: 4}, (_, r) =>
+  Array.from({length: LOGO.n}, (_, i) => lgFraction('m', i, 0) > r / 4 ? '█' : ' ').join(' '));
+const STEPS = ['Connecting to Spotify', 'Waking the player', 'Fetching your library', 'Ready'];
+$$('.term-banner').forEach(b => { b.innerHTML = lgBanner().map(r => '<span>' + r + '</span>').join(''); });
+
+const EQ_FRAMES = [...Array(8).keys()].map(k => lgLine('eq', k));
+const EQ_SETTLED = lgLine('play', 0);
+const tickers = new Map();
+function startTerm(scope){
+  const eq = $('.term-eq', scope), step = $('.term-step', scope);
+  if (!eq) return;
+  clearInterval(tickers.get(scope));
+  let tick = 0;
+  const paint = () => {
+    const r = reduced();
+    eq.textContent = (r || tick >= 30) ? EQ_SETTLED : EQ_FRAMES[tick % 8];
+    const i = r ? 3 : Math.min(3, Math.floor(tick / 9));
+    step.textContent = STEPS[i] + (i === 3 ? '' : '…');
+  };
+  paint();
+  if (reduced()) return;
+  tickers.set(scope, setInterval(() => {
+    tick++; paint();
+    if (tick > 36) clearInterval(tickers.get(scope));
+  }, 100));
+}
+
+/* ── replay ────────────────────────────────────────────────────── */
+function runScope(name){
+  const scope = $('[data-scope="' + name + '"]');
+  if (!scope) return;
+  scope.classList.remove('run');
+  void scope.offsetWidth;          // force the restart
+  scope.classList.add('run');
+  startTerm(scope);
+}
+$$('[data-replay]').forEach(b => b.addEventListener('click', () => runScope(b.dataset.replay)));
+
+/* ── SF Symbols stand-ins ──────────────────────────────────────── */
+function swapSym(sym){
+  if (!sym) return;
+  $$('.icon', sym).forEach(ic => ic.toggleAttribute('data-off'));
+}
+function bounce(btn){
+  if (!btn || reduced()) return;
+  btn.classList.remove('hit');
+  void btn.offsetWidth;
+  btn.classList.add('hit');
+}
+
+/* ── play / pause, shared across every surface ─────────────────── */
+let playing = true;
+function setPlaying(v){
+  if (v === playing) return;
+  playing = v;
+  $$('[data-play]').forEach(b => {
+    swapSym($('.sym', b));
+    b.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  });
+  $$('.eq').forEach(e => e.classList.toggle('paused', !playing));
+  setState('library', (libOpen ? 'open' : 'closed') + ' · ' + nowTitle() + (playing ? ' playing' : ' paused'));
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-play]');
+  if (b) setPlaying(!playing);
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-bounce]');
+  if (b) bounce(b);
+});
+
+const setState = (name, text) => $$('[data-state="' + name + '"]').forEach(el => el.textContent = text);
+
+$('[data-fire="play"]').addEventListener('click',   () => setPlaying(!playing));
+$('[data-fire="bounce"]').addEventListener('click', () => $$('#f-transport .bounce-right').forEach(bounce));
+
+/* ── shuffle · repeat ──────────────────────────────────────────── */
+const REPEAT = {off:'Repeat off', context:'Repeat all', track:'Repeat one'};
+function toggleShuffle(b){
+  const on = b.classList.toggle('on');
+  b.setAttribute('aria-pressed', String(on));
+  b.setAttribute('aria-label', on ? 'Shuffle on' : 'Shuffle off');
+  if (on) bounce(b);
+  reportModes(b);
+}
+function advanceRepeat(b){
+  const order = ['off', 'context', 'track'];
+  const next = order[(order.indexOf(b.dataset.repeat) + 1) % 3];
+  b.dataset.repeat = next;
+  if (next === 'context'){ b.classList.add('on'); bounce(b); }
+  else if (next === 'track'){ swapSym($('.sym', b)); }          // repeat → repeat.1, no bounce
+  else { swapSym($('.sym', b)); b.classList.remove('on'); }
+  b.setAttribute('aria-label', REPEAT[next]);
+  reportModes(b);
+}
+function reportModes(btn){
+  // Report the pair the click actually belongs to. Both the bench and the
+  // mode-switch mock carry a shuffle and a repeat button; reading the first
+  // in the document made the caption contradict the button just pressed.
+  const scope = (btn && btn.closest('.demo, .bench, section')) || document;
+  const sh = $('[data-toggle="shuffle"]', scope) || $('[data-toggle="shuffle"]');
+  const rp = $('[data-repeat]', scope) || $('[data-repeat]');
+  setState('repeat', (sh && sh.classList.contains('on') ? 'shuffle on' : 'shuffle off') +
+           ' · ' + REPEAT[rp ? rp.dataset.repeat : 'off'].toLowerCase());
+}
+document.addEventListener('click', e => {
+  const sh = e.target.closest('[data-toggle="shuffle"]');  if (sh) return toggleShuffle(sh);
+  const rp = e.target.closest('[data-repeat]');            if (rp) return advanceRepeat(rp);
+});
+$('[data-fire="shuffle"]').addEventListener('click', () => $('#f-modes [data-toggle="shuffle"]').click());
+$('[data-fire="repeat"]').addEventListener('click',  () => $('#f-modes [data-repeat]').click());
+
+/* ── like ──────────────────────────────────────────────────────── */
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-like]');
+  if (!b) return;
+  e.stopPropagation();
+  const on = b.classList.toggle('on');
+  swapSym($('.sym', b));
+  b.setAttribute('aria-pressed', String(on));
+  if (on) bounce(b);                                   // unliking never celebrates
+  if (b.dataset.like !== 'lib')
+    setState('like', on ? 'liked · filled, green, bounced' : 'not liked');
+});
+$('[data-fire="like"]').addEventListener('click', () => {
+  $$('#f-like [data-like]').forEach(b => b.click());
+});
+
+/* ── mode switch ───────────────────────────────────────────────── */
+const SIZES = {mini:'320 × 60', normal:'440 × 188', extended:'440 × 412'};
+const ORDER = ['mini', 'normal', 'extended'];
+function setMode(shell, mode){
+  shell.dataset.mode = mode;
+  $('.morph', shell).dataset.mode = mode;
+  const orb = $('.mode-orb .icon', shell);
+  if (orb) orb.style.setProperty('--symbol',
+    "url('assets/" + (mode === 'extended' ? 'arrow.down.right.and.arrow.up.left'
+                                          : 'arrow.up.left.and.arrow.down.right') + ".png')");
+  if (shell.id === 'mode-shell')  setState('mode',  mode + ' · ' + SIZES[mode]);
+  if (shell.id === 'queue-shell') setState('queue', mode + ' · queue ' + (mode === 'extended' ? 'revealed' : 'hidden'));
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-cycle]');
+  if (!b) return;
+  const shell = b.closest('.shell') || $('#mode-shell');
+  setMode(shell, ORDER[(ORDER.indexOf(shell.dataset.mode) + 1) % 3]);
+});
+$$('[data-mode-set]').forEach(b => b.addEventListener('click', () => setMode($('#mode-shell'), b.dataset.modeSet)));
+$('[data-queue="toggle"]').addEventListener('click', () => {
+  const sh = $('#queue-shell');
+  setMode(sh, sh.dataset.mode === 'extended' ? 'normal' : 'extended');
+});
+
+/* ── which side the detached circles sit on ────────────────────── */
+function placeOrbs(shell, scene){
+  const p = $('.morph, .mini', shell).getBoundingClientRect();
+  const s = scene.getBoundingClientRect();
+  shell.dataset.side     = (p.left + p.width / 2)  < (s.left + s.width / 2) ? 'right' : 'left';
+  shell.dataset.vertical = (p.top  + p.height / 2) < (s.top  + s.height / 2) ? 'bottom' : 'top';
+  return shell.dataset;
+}
+const EDGE = {tl:[0, 0], tr:[1, 0], bl:[0, 1], br:[1, 1]};
+$$('[data-edge]').forEach(b => b.addEventListener('click', () => {
+  const shell = $('#edge-shell'), scene = shell.parentElement;
+  const [fx, fy] = EDGE[b.dataset.edge];
+  const x = fx * (scene.clientWidth  - shell.offsetWidth  - 104);
+  const y = fy * (scene.clientHeight - shell.offsetHeight - 72);
+  shell.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+  // the flip is instant and happens on the crossing, not on arrival
+  shell.dataset.side     = (x + shell.offsetLeft + 36 + 220) < scene.clientWidth  / 2 ? 'right' : 'left';
+  shell.dataset.vertical = (y + shell.offsetTop  + 36 +  94) < scene.clientHeight / 2 ? 'bottom' : 'top';
+  setState('edge', (shell.dataset.side === 'right' ? 'mode button right' : 'mode button left') +
+    ' · library and close ' + (shell.dataset.vertical === 'bottom' ? 'below' : 'above'));
+}));
+
+/* ── sliders ───────────────────────────────────────────────────── */
+// Both halves floor the same value. Mixing floor for minutes with round for
+// seconds makes 119.6 render as 1:00 — a minute backwards — and the scrub
+// demo feeds this fractional seconds straight from the pointer.
+const fmt = n => { const s = Math.floor(n); return (s / 60 | 0) + ':' + String(s % 60).padStart(2, '0'); };
+function initSlider(el){
+  const fill = $('.rail i', el), thumb = $('.thumb', el);
+  const max = +el.getAttribute('aria-valuemax');
+  let val = +el.getAttribute('aria-valuenow');
+  const label = el.dataset.slider === 'seek' ? $('.elapsed', el.closest('.seek-demo')) : null;
+  const paint = () => {
+    const p = val / max * 100;
+    fill.style.width = p + '%';
+    thumb.style.left = p + '%';
+    el.setAttribute('aria-valuenow', String(Math.round(val)));
+    if (label) label.textContent = fmt(val);
+  };
+  el.set = v => { val = Math.max(0, Math.min(max, v)); paint(); };
+  el.get = () => val;
+  paint();
+
+  let down = false;
+  const at = e => { const r = el.getBoundingClientRect(); return (e.clientX - r.left) / r.width * max; };
+  el.addEventListener('pointerdown', e => {
+    down = true; el.setPointerCapture(e.pointerId);
+    el.classList.add('grabbed', 'scrub');          // grow, then track 1:1
+    el.set(at(e));
+  });
+  el.addEventListener('pointermove', e => { if (down) el.set(at(e)); });
+  const release = () => { if (!down) return; down = false; el.classList.remove('grabbed', 'scrub'); };
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('keydown', e => {
+    const s = max / 50;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp')  { el.set(val + s); e.preventDefault(); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowDown'){ el.set(val - s); e.preventDefault(); }
+  });
+  return el;
+}
+$$('[data-slider]').forEach(initSlider);
+
+const seek = $('[data-slider="seek"]');
+let counting = true;
+setInterval(() => {
+  if (!counting || !playing || seek.classList.contains('grabbed')) return;
+  seek.set((seek.get() + 1) % 337);
+}, 1000);
+$('[data-fire="tick"]').addEventListener('click', function(){
+  counting = !counting;
+  this.setAttribute('aria-pressed', String(counting));
+  this.textContent = counting ? 'Elapsed is counting' : 'Elapsed is held';
+});
+$('[data-fire="scrub"]').addEventListener('click', () => {
+  seek.classList.add('grabbed');                                   // 120 ms grow
+  const from = seek.get(), to = from > 200 ? 40 : 250, t0 = performance.now();
+  setTimeout(() => {
+    seek.classList.add('scrub');                                   // then 1:1, no easing
+    const step = now => {
+      const k = Math.min(1, (now - t0 - 130) / 900);
+      seek.set(from + (to - from) * k);
+      if (k < 1) requestAnimationFrame(step);
+      else { seek.classList.remove('grabbed', 'scrub'); }           // 160 ms settle
+    };
+    requestAnimationFrame(step);
+  }, 130);
+  setState('seek', 'scripted drag · 120 ms grow, 900 ms travel, 160 ms settle');
+});
+
+/* ── device popover ────────────────────────────────────────────── */
+const pop = $('#dev-pop'), popBtn = $('[data-pop]');
+function setPop(open){
+  pop.classList.toggle('open', open);
+  popBtn.classList.toggle('on', open);
+  popBtn.setAttribute('aria-expanded', String(open));
+  setState('device', (open ? 'open' : 'closed') + ' · playing on ' + $('.device-option.on').dataset.device);
+}
+popBtn.addEventListener('click', () => setPop(!pop.classList.contains('open')));
+$$('.device-option').forEach(o => o.addEventListener('click', () => {
+  $$('.device-option').forEach(x => { x.classList.toggle('on', x === o); x.setAttribute('aria-checked', String(x === o)); });
+  setPop(false);
+}));
+$('[data-fire="pop"]').addEventListener('click', () => { setPop(true); setTimeout(() => setPop(false), 1400); });
+
+/* ── library ───────────────────────────────────────────────────── */
+const lib = $('#library'), rows = $$('#track-list .lib-row'), search = $('#lib-search');
+let libOpen = true;
+const nowTitle = () => $('#track-list .lib-row.playing .row-title').textContent;
+function setLib(open){
+  libOpen = open;
+  lib.classList.toggle('open', open);
+  setState('library', (open ? 'open' : 'closed') + ' · ' + nowTitle() + (playing ? ' playing' : ' paused'));
+}
+$$('[data-lib]').forEach(b => b.addEventListener('click', () => setLib(b.dataset.lib === 'open')));
+
+function filter(){
+  const q = search.value.trim().toLowerCase();
+  let shown = 0;
+  rows.forEach(r => {
+    const hit = !q || (r.dataset.title + ' ' + r.dataset.artist).toLowerCase().includes(q);
+    r.classList.toggle('gone', !hit);
+    if (hit) shown++;
+  });
+  $('#lib-empty').classList.toggle('on', shown === 0);
+  $('#list-end').textContent = shown === 0 ? ''
+    : q ? shown + ' matching track' + (shown === 1 ? '' : 's')
+        : 'All 6 tracks shown · Hearts keep this collection yours.';
+}
+search.addEventListener('input', filter);
+$('[data-fire="filter"]').addEventListener('click', () => { search.value = 'within'; filter(); });
+$('[data-fire="clear"]').addEventListener('click',  () => { search.value = '';       filter(); });
+
+function selectRow(row){
+  rows.forEach(r => r.classList.toggle('selected', r === row));
+}
+function startRow(row){
+  rows.forEach(r => {
+    const on = r === row;
+    r.classList.toggle('playing', on);
+    const art = $('.row-art', r);
+    const badge = $('.eq', art);
+    if (on && !badge)
+      art.insertAdjacentHTML('beforeend',
+        '<span class="eq live" role="img" aria-label="Currently playing"><i></i><i></i><i></i></span>');
+    if (!on && badge) badge.remove();
+  });
+  selectRow(row);
+  if (!playing) setPlaying(true);
+  $('#now-title').innerHTML = row.dataset.title + ' <small>· ' + row.dataset.artist + '</small>';
+  setState('library', (libOpen ? 'open' : 'closed') + ' · ' + nowTitle() + ' playing');
+}
+rows.forEach(r => r.addEventListener('click', e => {
+  if (e.target.closest('[data-like]')) return;
+  if (e.target.closest('.row-art, .row-title')) startRow(r); else selectRow(r);
+}));
+$('[data-fire="select"]').addEventListener('click', () => {
+  const live = rows.filter(r => !r.classList.contains('gone'));
+  const i = live.findIndex(r => r.classList.contains('selected'));
+  selectRow(live[(i + 1) % live.length]);
+});
+$('[data-fire="start"]').addEventListener('click', () => {
+  const row = rows.find(r => r.classList.contains('selected') && !r.classList.contains('gone'));
+  if (row) startRow(row);
+});
+
+/* ── panel drag ────────────────────────────────────────────────── */
+const dragShell = $('#drag-shell'), dragScene = $('#drag-scene');
+let pos = {x:0, y:0}, grab = null;
+const move = () => { dragShell.style.transform = 'translate(' + pos.x + 'px,' + pos.y + 'px)'; };
+function clamp(){
+  const s = dragScene.getBoundingClientRect(), r = dragShell.getBoundingClientRect();
+  if (r.left   < s.left   + 4)  pos.x += s.left   + 4  - r.left;
+  if (r.right  > s.right  - 4)  pos.x -= r.right  - s.right  + 4;
+  if (r.top    < s.top    + 26) pos.y += s.top    + 26 - r.top;
+  if (r.bottom > s.bottom - 4)  pos.y -= r.bottom - s.bottom + 4;
+  move();
+}
+function reportDrag(state){
+  const d = placeOrbs(dragShell, dragScene);
+  setState('drag', state + ' · ' + (d.side === 'right' ? 'left of midline' : 'right of midline') +
+    ' · mode button on the ' + d.side);
+}
+dragShell.addEventListener('pointerdown', e => {
+  if (e.target.closest('button')) return;
+  grab = {x: e.clientX - pos.x, y: e.clientY - pos.y};
+  dragShell.setPointerCapture(e.pointerId);
+  dragShell.classList.add('lifted', 'scrub');        // 120 ms lift, then 1:1
+  reportDrag('picked up');
+});
+dragShell.addEventListener('pointermove', e => {
+  if (!grab) return;
+  pos.x = e.clientX - grab.x; pos.y = e.clientY - grab.y;
+  move(); reportDrag('moving');
+});
+function drop(){
+  if (!grab) return;
+  grab = null;
+  dragShell.classList.remove('lifted', 'scrub');     // the spring is on the shell transition
+  clamp(); reportDrag('at rest');
+}
+dragShell.addEventListener('pointerup', drop);
+dragShell.addEventListener('pointercancel', drop);
+$('[data-fire="throw"]').addEventListener('click', () => {
+  dragShell.classList.add('lifted', 'scrub');
+  pos = {x: dragScene.clientWidth - 120, y: dragScene.clientHeight - 60}; move();
+  reportDrag('thrown');
+  setTimeout(() => { dragShell.classList.remove('lifted', 'scrub'); clamp(); reportDrag('clamped back'); }, 260);
+});
+$('[data-fire="recentre"]').addEventListener('click', () => {
+  dragShell.classList.remove('scrub');
+  pos = {x:0, y:0}; move(); reportDrag('at rest');
+});
+
+/* ── page controls ─────────────────────────────────────────────── */
+const reduceBtn = $('#reduce-toggle'), mq = matchMedia('(prefers-reduced-motion:reduce)');
+function setReduce(on){
+  root.dataset.reduce = on ? 'on' : 'off';
+  reduceBtn.setAttribute('aria-pressed', String(on));
+  reduceBtn.textContent = on ? 'Reduce Motion · on' : 'Reduce Motion';
+  $$('[data-scope]').forEach(startTerm);
+}
+setReduce(mq.matches);
+mq.addEventListener('change', e => setReduce(e.matches));
+reduceBtn.addEventListener('click', () => setReduce(root.dataset.reduce !== 'on'));
+
+const peekBtn = $('#peek-all');
+peekBtn.addEventListener('click', () => {
+  const on = peekBtn.getAttribute('aria-pressed') !== 'true';
+  peekBtn.setAttribute('aria-pressed', String(on));
+  $$('.shell').forEach(s => s.classList.toggle('peek', on));
+});
+
+$('#replay-all').addEventListener('click', () => {
+  runScope('launch'); runScope('term2');
+  setMode($('#mode-shell'), 'mini');
+  setMode($('#queue-shell'), 'normal');
+  setLib(false);
+  setTimeout(() => { setMode($('#mode-shell'), 'normal'); setMode($('#queue-shell'), 'extended'); setLib(true); }, 420);
+});
+
+/* ── first paint ───────────────────────────────────────────────── */
+runScope('launch');
+runScope('term2');
+reportModes();
+reportDrag('at rest');
+setState('library', 'open · ' + nowTitle() + ' playing');
+})();
+</script>
+</body>
+</html>

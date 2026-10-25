@@ -1,0 +1,14 @@
+[
+  {
+    "id": "desktop",
+    "query": "ocean coastline aerial blue waves rocky shore",
+    "status": "ok",
+    "provider": "pixabay",
+    "path": "assets/stock/desktop.jpg",
+    "alt": "blue, water, ocean, sea, waves, shore, road, trail, coast mountain, travel, trip, nature, aerial",
+    "author": "StockSnap",
+    "authorUrl": "https://pixabay.com/users/StockSnap-894430/",
+    "sourceUrl": "https://pixabay.com/photos/blue-water-ocean-sea-waves-shore-2606755/",
+    "license": "Pixabay Content License (https://pixabay.com/service/license-summary/)"
+  }
+]
