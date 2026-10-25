@@ -77,6 +77,23 @@ test('a spawn error is recorded instead of taking the daemon down', async () => 
   assert.match(player.lastError, /build\.sh/, 'the message must point at the fix');
 });
 
+// WebKit can kill the content process while the host app lives on. The
+// daemon would keep a device id Spotify still accepts commands for, and
+// every play would succeed silently with no sound.
+test('a reloading notice clears the stale device id', async () => {
+  const child = fakeChild();
+  const player = createPlayer({ pagePort: 1, spawnImpl: () => child });
+  player.start();
+  player.handleEvent('ready', { device_id: 'OLD' });
+  assert.equal(player.deviceId, 'OLD');
+
+  child.stdout.write('{"type":"reloading","reason":"web content process terminated"}\n');
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(player.deviceId, null, 'the dead device id must not survive a reload');
+  assert.match(player.lastError, /content process/);
+});
+
 test('the player is restarted after its process dies', async () => {
   let spawns = 0;
   const player = createPlayer({

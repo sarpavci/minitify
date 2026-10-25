@@ -60,6 +60,15 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         emit(["type": "error", "message": error.localizedDescription])
     }
 
+    // WebKit can kill the content process while this app keeps running.
+    // The web view is then blank: the SDK is gone, but the daemon still
+    // holds a device id Spotify accepts commands for, so playback silently
+    // does nothing. Tell the daemon to drop it, then reload.
+    func webViewWebContentProcessDidTerminate(_ view: WKWebView) {
+        emit(["type": "reloading", "reason": "web content process terminated"])
+        view.load(URLRequest(url: pageURL))
+    }
+
     // MARK: media keys
 
     private func registerMediaKeys() {

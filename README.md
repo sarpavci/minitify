@@ -76,6 +76,13 @@ No dependencies, no `node_modules`, no install step.
   10 in February 2026. The selector says so instead of paginating.
 - **Development Mode apps serve at most 5 users**, which is plenty for
   personal use but means this is not something you hand to a group.
+- **Control Center shows two entries while playing.** One is this app's,
+  with the real track; the other is the SDK's own "Spotify Embedded
+  Player". Suppressing the SDK's media session was tried and breaks
+  playback outright — the SDK depends on it and answers with
+  `playback_error`. As a side effect, the first media-key press after
+  focusing another app may land on the SDK's entry and do nothing; press
+  play/pause once and next/previous work from then on.
 - The player is not covered by automated tests: DRM, audio output and
   media keys cannot be faked in a test environment. They are verified by
   hand.

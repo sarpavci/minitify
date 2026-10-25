@@ -22,6 +22,17 @@ test('playerPage loads the official SDK', () => {
   assert.ok(playerPage('t', 'd').includes('https://sdk.scdn.co/spotify-player.js'));
 });
 
+// Replacing navigator.mediaSession with an inert object to suppress the
+// SDK's "Spotify Embedded Player" entry broke playback outright: the SDK
+// depends on it and answered with playback_error. The duplicate Now
+// Playing entry stays for now; see README "Known limits".
+test('playerPage leaves navigator.mediaSession alone', () => {
+  assert.ok(
+    !playerPage('t', 'd').includes('defineProperty(navigator'),
+    'the SDK needs a working media session',
+  );
+});
+
 test('the server serves the page at /player', async () => {
   const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {} });
   try {

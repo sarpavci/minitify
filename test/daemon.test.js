@@ -73,6 +73,43 @@ test('play transfers to the device before starting playback', async () => {
   assert.deepEqual(d.api.calls[0], ['transfer', 'DEV']);
 });
 
+// Spotify answers 200 for a play aimed at a device that has quietly died,
+// so "the request succeeded" is not evidence that music started.
+test('play restarts the player when playback never actually starts', async () => {
+  let restarts = 0;
+  const player = {
+    deviceId: 'DEV',
+    lastError: null,
+    waitReady: async () => 'DEV',
+    waitForPlayback: async () => false, // nothing ever starts
+    restart() { restarts += 1; },
+    stop() {},
+  };
+  const d = deps({ player });
+  await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, d);
+
+  assert.equal(restarts, 1, 'a silent failure must refresh the player');
+  const plays = d.api.calls.filter((c) => c[0] === 'playContext');
+  assert.equal(plays.length, 2, 'and try once more');
+});
+
+test('play does not restart the player when music starts', async () => {
+  let restarts = 0;
+  const player = {
+    deviceId: 'DEV',
+    lastError: null,
+    waitReady: async () => 'DEV',
+    waitForPlayback: async () => true,
+    restart() { restarts += 1; },
+    stop() {},
+  };
+  const d = deps({ player });
+  await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, d);
+
+  assert.equal(restarts, 0);
+  assert.equal(d.api.calls.filter((c) => c[0] === 'playContext').length, 1);
+});
+
 test('resume transfers to the device as well', async () => {
   const d = deps();
   await handleCommand({ name: 'resume' }, d);

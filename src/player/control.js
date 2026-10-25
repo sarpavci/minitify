@@ -8,6 +8,7 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
   let deviceId = null;
   let lastError = null;
   let waiters = [];
+  let playbackWaiters = [];
 
   const log = (line) => onLog?.(line);
 
@@ -20,6 +21,14 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
     waiters = [];
   }
 
+  function settlePlayback() {
+    for (const { resolve, timer } of playbackWaiters) {
+      clearTimeout(timer);
+      resolve(true);
+    }
+    playbackWaiters = [];
+  }
+
   function handleLine(line) {
     let message;
     try {
@@ -29,6 +38,14 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
     }
     if (message.type === 'mediakey') onMediaKey?.(message.command);
     else if (message.type === 'error') lastError = message.message;
+    else if (message.type === 'reloading') {
+      // WebKit killed the content process and the page is coming back.
+      // The old device id is dead, but Spotify still accepts commands for
+      // it — so every play would report success and play nothing.
+      deviceId = null;
+      lastError = message.reason ?? 'the player reloaded';
+      log(`player reloading: ${lastError}`);
+    }
   }
 
   const player = {
@@ -91,6 +108,24 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       if (kind === 'ready') settleReady(data.device_id);
       else if (kind === 'not_ready') deviceId = null;
       else if (kind === 'error') lastError = data.message || data.kind;
+      else if (kind === 'state' && !data.paused) settlePlayback();
+    },
+
+    // Resolves once the SDK reports it is actually playing. The web API
+    // returning 200 does not mean sound came out.
+    waitForPlayback(timeoutMs = 3000) {
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          playbackWaiters = playbackWaiters.filter((w) => w.timer !== timer);
+          resolve(false);
+        }, timeoutMs);
+        playbackWaiters.push({ resolve, timer });
+      });
+    },
+
+    restart() {
+      player.stop();
+      player.start();
     },
 
     waitReady(timeoutMs = 5000) {

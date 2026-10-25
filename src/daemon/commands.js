@@ -1,4 +1,5 @@
 const PLAYER_READY_TIMEOUT_MS = 5000;
+const PLAYBACK_START_TIMEOUT_MS = 3000;
 
 const ok = (data = null) => ({ ok: true, data });
 const fail = (error) => ({ ok: false, error });
@@ -52,10 +53,23 @@ export async function handleCommand(cmd, deps) {
       case 'play': {
         const uri = args[0];
         if (!uri) return fail('play needs a Spotify uri');
-        const deviceId = await activateDevice(deps);
-        // Tracks play as a uri list; playlists and albums play as a context.
-        if (uri.startsWith('spotify:track:')) await api.playUris([uri], deviceId);
-        else await api.playContext(uri, deviceId);
+
+        const start = async () => {
+          const deviceId = await activateDevice(deps);
+          // Tracks play as a uri list; playlists and albums play as a context.
+          if (uri.startsWith('spotify:track:')) await api.playUris([uri], deviceId);
+          else await api.playContext(uri, deviceId);
+        };
+
+        await start();
+
+        // Spotify answers 200 even when the target device has quietly died,
+        // so success here is not evidence that music started. If the player
+        // never reports playback, refresh it and try once more.
+        if (player.waitForPlayback && !(await player.waitForPlayback(PLAYBACK_START_TIMEOUT_MS))) {
+          player.restart();
+          await start();
+        }
         return ok();
       }
 
