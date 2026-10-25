@@ -1,16 +1,39 @@
 {
   "name": "minitify",
   "version": "0.1.0",
-  "description": "Minimal terminal controller for Spotify",
+  "description": "A small Spotify remote for the terminal \u2014 plays on your Mac with no dock icon and no Spotify app",
+  "license": "MIT",
+  "author": "Sarp Avci",
+  "homepage": "https://github.com/sarpavci/minitify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sarpavci/minitify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sarpavci/minitify/issues"
+  },
+  "keywords": [
+    "spotify",
+    "terminal",
+    "cli",
+    "macos",
+    "music",
+    "player",
+    "menubar",
+    "overlay"
+  ],
   "type": "module",
   "private": true,
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "minitify": "./bin/minitify"
   },
   "scripts": {
     "test": "node --test"
-  },
-  "engines": {
-    "node": ">=20"
   }
 }

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests and player build
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # No dependencies to install — the project is Node built-ins only.
+      - name: Unit tests
+        run: node --test
+
+      - name: Build the WKWebView player
+        run: sh player/build.sh
+
+      - name: Confirm the binary runs headless-safe
+        run: test -x player/wkplayer

@@ -1,7 +1,21 @@
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/mark-dark.svg">
+  <img src=".github/assets/mark-light.svg" alt="minitify" width="84" height="84">
+</picture>
+
 # minitify
 
-A small Spotify remote for the terminal. Audio plays on this Mac, but
-nothing appears in the dock and no Spotify app runs.
+**A small Spotify remote for the terminal.**
+Audio plays on this Mac, but nothing appears in the dock and no Spotify app runs.
+
+[![CI](https://github.com/sarpavci/minitify/actions/workflows/ci.yml/badge.svg)](https://github.com/sarpavci/minitify/actions/workflows/ci.yml)
+[![macOS](https://img.shields.io/badge/macOS-14%2B-111?logo=apple&logoColor=white)](#requirements)
+[![Node](https://img.shields.io/badge/node-20%2B-111?logo=node.js&logoColor=white)](#requirements)
+[![License](https://img.shields.io/badge/license-MIT-111)](LICENSE)
+
+</div>
 
 ```
 minitify                      pick a playlist
@@ -55,10 +69,16 @@ them a reliable way to skip tracks regardless of which app has focus.
 The panel is a borderless non-activating `NSPanel` using the `.hudWindow`
 material, drawn to the measurements in the design handoff.
 
-## Setup
+## Requirements
 
-Spotify Premium is required — the Web Playback SDK does not serve free
-accounts.
+| | |
+|---|---|
+| **macOS 14+** | SF Symbols effects and the overlay panel need Sonoma or later. macOS only — the player is AppKit. |
+| **Node 20+** | No runtime dependencies. Everything is a Node built-in. |
+| **Command Line Tools** | `swiftc` builds the 400-line player host. Xcode is not needed. |
+| **Spotify Premium** | The Web Playback SDK does not serve free accounts. |
+
+## Setup
 
 1. Create an app at <https://developer.spotify.com/dashboard>
    - Redirect URI: `http://127.0.0.1:8888/callback` (exactly this;
