@@ -17,6 +17,9 @@ Audio plays on this Mac, but nothing appears in the dock and no Spotify app runs
 
 [Setup](docs/spotify-setup.md) · [Commands](docs/commands.md) · [Architecture](docs/architecture.md) · [Design](docs/design.md) · [Motion](docs/motion.md) · [Troubleshooting](docs/troubleshooting.md)
 
+**[See it move →](https://sarpavci.github.io/minitify/)**
+A 30-second film of the whole thing, the live motion system, the interface at actual size, and the mark.
+
 </div>
 
 ```

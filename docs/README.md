@@ -8,6 +8,7 @@
 | [Design](design.md) | Windows, materials, type, colour and components |
 | [Motion](motion.md) | Every animation: beat map, duration, easing, and the native API that carries it |
 | [Troubleshooting](troubleshooting.md) | The failure modes already hit, with their causes |
+| [The design site](https://sarpavci.github.io/minitify/) | The film, the live motion system, the interface at actual size and the mark — published from [`site/`](../site) |
 | [Contributing](../CONTRIBUTING.md) | What this project is trying to be, and what will be turned down |
 
 ## The short version

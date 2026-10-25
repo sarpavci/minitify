@@ -1,0 +1,25 @@
+{
+  "album": {
+    "title": "Random Access Memories",
+    "artist": "Daft Punk",
+    "source": "https://daftpunk.com/randomaccessmemories/",
+    "image": "https://daftpunk.com/img/randomaccessmemories.jpg",
+    "rights": "\u00a9 respective rights holders. Official artwork used for illustrative product design."
+  },
+  "symbols": {
+    "source": "macOS AppKit NSImage(systemSymbolName:)",
+    "names": [
+      "arrow.down.right.and.arrow.up.left",
+      "arrow.up.left.and.arrow.down.right",
+      "backward.fill",
+      "forward.fill",
+      "music.note",
+      "pause.fill",
+      "play.fill",
+      "repeat",
+      "repeat.1",
+      "shuffle",
+      "xmark"
+    ]
+  }
+}
