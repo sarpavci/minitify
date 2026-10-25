@@ -14,7 +14,10 @@ function stubFetch(...responses) {
       ok: r.status === undefined ? true : r.status >= 200 && r.status < 300,
       status: r.status ?? 200,
       headers: { get: (name) => (r.headers ?? {})[name.toLowerCase()] ?? null },
-      text: async () => (r.body === undefined ? '' : JSON.stringify(r.body)),
+      text: async () => {
+        if (r.rawText !== undefined) return r.rawText;
+        return r.body === undefined ? '' : JSON.stringify(r.body);
+      },
     };
   };
   impl.calls = calls;
@@ -63,6 +66,15 @@ test('listPlaylists maps items to name, uri and trackCount', async () => {
 test('listPlaylists tolerates a playlist with no track count', async () => {
   const f = stubFetch({ body: { items: [{ name: 'Empty', uri: 'spotify:playlist:2' }] } });
   assert.equal((await api(f).listPlaylists())[0].trackCount, 0);
+});
+
+// Since the February 2026 API changes the count arrives under `items`,
+// not `tracks`. Older shapes still turn up, so both are read.
+test('listPlaylists reads the track count from the items field', async () => {
+  const f = stubFetch({
+    body: { items: [{ name: 'Focus', uri: 'spotify:playlist:1', items: { total: 9 } }] },
+  });
+  assert.equal((await api(f).listPlaylists())[0].trackCount, 9);
 });
 
 test('status returns null when Spotify answers 204', async () => {
@@ -131,6 +143,23 @@ test('a 429 response throws an error carrying retryAfter', async () => {
 test('a non-2xx response throws with the Spotify message', async () => {
   const f = stubFetch({ status: 403, body: { error: { message: 'Player command failed' } } });
   await assert.rejects(() => api(f).pause(), /Player command failed/);
+});
+
+// Spotify documents 204 for the playback control endpoints, but in practice
+// they answer 200 with an opaque, non-JSON token in the body.
+test('a 200 response with a non-JSON body resolves to null', async () => {
+  const f = stubFetch({ status: 200, rawText: '2ZenW4wmqUdRMw-C7bqKAeFeBIU' });
+  assert.equal(await api(f).pause(), null);
+});
+
+test('next survives the same non-JSON body', async () => {
+  const f = stubFetch({ status: 200, rawText: '3c9L1JVD35sLYRRic-jab5KJ_hA' });
+  assert.equal(await api(f).next(), null);
+});
+
+test('a non-2xx response with a non-JSON body still throws', async () => {
+  const f = stubFetch({ status: 500, rawText: 'upstream exploded' });
+  await assert.rejects(() => api(f).pause(), /HTTP 500/);
 });
 
 test('transfer posts the device id', async () => {

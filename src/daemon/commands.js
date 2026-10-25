@@ -25,6 +25,15 @@ async function ensureDevice({ player }) {
   }
 }
 
+// A Web Playback SDK device registers as inactive, and a play call carrying
+// only device_id leaves it that way — the call succeeds and no sound comes
+// out. Transferring first is what actually hands it the session.
+async function activateDevice(deps) {
+  const deviceId = await ensureDevice(deps);
+  await deps.api.transfer(deviceId);
+  return deviceId;
+}
+
 export async function handleCommand(cmd, deps) {
   const { api, player, shutdown } = deps;
   const args = cmd.args ?? [];
@@ -43,7 +52,7 @@ export async function handleCommand(cmd, deps) {
       case 'play': {
         const uri = args[0];
         if (!uri) return fail('play needs a Spotify uri');
-        const deviceId = await ensureDevice(deps);
+        const deviceId = await activateDevice(deps);
         // Tracks play as a uri list; playlists and albums play as a context.
         if (uri.startsWith('spotify:track:')) await api.playUris([uri], deviceId);
         else await api.playContext(uri, deviceId);
@@ -54,7 +63,7 @@ export async function handleCommand(cmd, deps) {
         return ok(await api.pause());
 
       case 'resume': {
-        const deviceId = await ensureDevice(deps);
+        const deviceId = await activateDevice(deps);
         return ok(await api.resume(deviceId));
       }
 

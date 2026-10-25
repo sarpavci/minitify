@@ -1,13 +1,27 @@
 #!/usr/bin/env node
+import { createInterface } from 'node:readline/promises';
+
 import { parseArgs, USAGE } from '../src/cli/commands.js';
 import { sendCommand } from '../src/cli/client.js';
+import { select } from '../src/cli/selector.js';
 import { login } from '../src/spotify/auth.js';
 import { loadConfig } from '../src/config.js';
-import { createInterface } from 'node:readline/promises';
+import { SEARCH_LIMIT } from '../src/spotify/api.js';
 
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+
+async function send(cmd) {
+  const result = await sendCommand(cmd).catch((err) => ({ ok: false, error: err.message }));
+  if (!result.ok) fail(result.error);
+  return result.data;
+}
+
+function formatStatus(status) {
+  if (!status) return null;
+  return `${status.playing ? '▶' : '❚❚'} ${status.trackName} — ${status.artist}`;
 }
 
 async function runLogin() {
@@ -29,10 +43,15 @@ async function runLogin() {
   console.log('Logged in.');
 }
 
-function formatStatus(status) {
-  if (!status) return 'Nothing playing';
-  const mark = status.playing ? '▶' : '❚❚';
-  return `${mark} ${status.trackName} — ${status.artist}`;
+// Shows the list, plays what the user picks, and leaves the terminal as it
+// was found. Nothing is printed on success — the music is the feedback.
+async function pickAndPlay(items, { header, emptyMessage }) {
+  if (!items.length) {
+    console.log(emptyMessage);
+    return;
+  }
+  const choice = await select(items, { header });
+  if (choice) await send({ name: 'play', args: [choice.uri] });
 }
 
 const argv = process.argv.slice(2);
@@ -50,16 +69,27 @@ try {
 }
 
 if (cmd.name === 'login') {
-  runLogin().catch((err) => fail(err.message));
+  await runLogin().catch((err) => fail(err.message));
+} else if (cmd.name === 'playlists') {
+  const [playlists, status] = await Promise.all([
+    send({ name: 'playlists' }),
+    send({ name: 'status' }),
+  ]);
+  await pickAndPlay(
+    playlists.map((p) => ({ ...p, label: `${p.name}  (${p.trackCount})` })),
+    { header: formatStatus(status), emptyMessage: 'No playlists in your library.' },
+  );
+} else if (cmd.name === 'search') {
+  const results = await send(cmd);
+  const header = results.length === SEARCH_LIMIT
+    ? `Showing ${SEARCH_LIMIT} results (Spotify's maximum) — narrow the search for more`
+    : undefined;
+  await pickAndPlay(
+    results.map((t) => ({ ...t, label: `${t.name} — ${t.artist}` })),
+    { header, emptyMessage: 'Nothing found.' },
+  );
+} else if (cmd.name === 'status') {
+  console.log(formatStatus(await send(cmd)) ?? 'Nothing playing');
 } else {
-  const result = await sendCommand(cmd).catch((err) => ({ ok: false, error: err.message }));
-
-  if (!result.ok) fail(result.error);
-
-  if (cmd.name === 'status') console.log(formatStatus(result.data));
-  else if (cmd.name === 'playlists' || cmd.name === 'search') {
-    for (const item of result.data ?? []) {
-      console.log(item.artist ? `${item.name} — ${item.artist}` : item.name);
-    }
-  }
+  await send(cmd);
 }

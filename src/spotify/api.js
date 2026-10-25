@@ -22,7 +22,17 @@ export function createApi({ getToken, fetchImpl = fetch }) {
     });
 
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+    // The playback control endpoints are documented as 204 but answer 200
+    // with an opaque, non-JSON token. Anything unparseable is simply "no
+    // data" — the status is what says whether the call worked.
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+    }
 
     if (!res.ok) {
       const err = new Error(data?.error?.message || `Spotify request failed (HTTP ${res.status})`);
@@ -44,7 +54,8 @@ export function createApi({ getToken, fetchImpl = fetch }) {
       return (data?.items ?? []).map((p) => ({
         name: p.name,
         uri: p.uri,
-        trackCount: p.tracks?.total ?? 0,
+        // The February 2026 API moved this count from `tracks` to `items`.
+        trackCount: p.tracks?.total ?? p.items?.total ?? 0,
       }));
     },
 

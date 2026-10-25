@@ -60,14 +60,31 @@ test('handleCommand returns ok:false for an unknown command', async () => {
 test('handleCommand passes the device id when starting playback', async () => {
   const d = deps();
   await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, d);
-  assert.deepEqual(d.api.calls[0], ['playContext', 'spotify:playlist:1', 'DEV']);
+  assert.deepEqual(d.api.calls.at(-1), ['playContext', 'spotify:playlist:1', 'DEV']);
+});
+
+// A Web Playback SDK device registers as inactive. Starting playback with
+// device_id alone leaves it that way and nothing comes out of the speakers;
+// it has to be transferred to first.
+test('play transfers to the device before starting playback', async () => {
+  const d = deps();
+  await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, d);
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['transfer', 'playContext']);
+  assert.deepEqual(d.api.calls[0], ['transfer', 'DEV']);
+});
+
+test('resume transfers to the device as well', async () => {
+  const d = deps();
+  await handleCommand({ name: 'resume' }, d);
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['transfer', 'resume']);
 });
 
 test('handleCommand plays a track uri through playUris', async () => {
   const d = deps();
   await handleCommand({ name: 'play', args: ['spotify:track:9'] }, d);
-  assert.equal(d.api.calls[0][0], 'playUris');
-  assert.deepEqual(d.api.calls[0][1], ['spotify:track:9']);
+  const playCall = d.api.calls.at(-1);
+  assert.equal(playCall[0], 'playUris');
+  assert.deepEqual(playCall[1], ['spotify:track:9']);
 });
 
 test('handleCommand surfaces a 429 retryAfter in the error text', async () => {
