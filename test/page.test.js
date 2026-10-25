@@ -1,0 +1,78 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { playerPage } from '../src/daemon/page.js';
+import { startHttpServer } from '../src/daemon/http.js';
+
+test('playerPage embeds the token as a JSON string literal', () => {
+  assert.ok(playerPage('TOKEN123', 'minitify').includes('"TOKEN123"'));
+});
+
+test('playerPage escapes a token containing a quote', () => {
+  const html = playerPage('ab"cd', 'minitify');
+  assert.ok(html.includes('"ab\\"cd"'), 'the quote must be escaped, not closed');
+});
+
+test('playerPage names the device', () => {
+  assert.ok(playerPage('t', 'my-player').includes('"my-player"'));
+});
+
+test('playerPage loads the official SDK', () => {
+  assert.ok(playerPage('t', 'd').includes('https://sdk.scdn.co/spotify-player.js'));
+});
+
+test('the server serves the page at /player', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {} });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/player`);
+    assert.equal(res.status, 200);
+    assert.ok((await res.text()).includes('spotify-player.js'));
+  } finally {
+    await server.close();
+  }
+});
+
+test('the server 404s on an unknown path', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {} });
+  try {
+    assert.equal((await fetch(`http://127.0.0.1:${server.port}/nope`)).status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test('POST /event forwards kind and data to onEvent', async () => {
+  const seen = [];
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: (k, d) => seen.push([k, d]) });
+  try {
+    await fetch(`http://127.0.0.1:${server.port}/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'ready', data: { device_id: 'DEV' } }),
+    });
+    assert.deepEqual(seen, [['ready', { device_id: 'DEV' }]]);
+  } finally {
+    await server.close();
+  }
+});
+
+test('the server binds a kernel-assigned port on loopback', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {} });
+  try {
+    assert.ok(server.port > 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test('a malformed event body does not take the server down', async () => {
+  const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {} });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/event`, { method: 'POST', body: 'not json' });
+    assert.equal(res.status, 400);
+    // still serving
+    assert.equal((await fetch(`http://127.0.0.1:${server.port}/player`)).status, 200);
+  } finally {
+    await server.close();
+  }
+});
