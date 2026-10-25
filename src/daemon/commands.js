@@ -2,6 +2,11 @@ import { REPEAT_MODES } from '../spotify/api.js';
 
 const PLAYER_READY_TIMEOUT_MS = 5000;
 const PLAYBACK_START_TIMEOUT_MS = 3000;
+const TRANSFER_SETTLE_TIMEOUT_MS = 3000;
+const RECOVERY_ATTEMPTS = 3;
+const RECOVERY_BACKOFF_MS = 400;
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const nextRepeat = (mode) =>
   REPEAT_MODES[(REPEAT_MODES.indexOf(mode) + 1) % REPEAT_MODES.length];
@@ -44,18 +49,74 @@ async function activateDevice(deps) {
 // can still be holding that id: a sleep drops the device server-side, and
 // the SDK page does not always get a not_ready through before it goes.
 //
-// Matched on the message, not on the status alone. Playing a playlist that
-// has been deleted is also a 404, and restarting the player for that would
-// cut off whatever is currently playing to fix something a restart cannot.
-const DEVICE_GONE = /device not found|no active device|device_not_found/i;
+// Matched on the message, because the status alone cannot tell these four
+// apart. Observed against the live API:
+//
+//   "Device not found"                      the id we transferred to is dead
+//   "Not found."                            the device went while Spotify
+//                                           still thought it was active —
+//                                           what a sleep actually leaves
+//   "Player command failed: No active
+//    device found"                          nothing is playing anywhere
+//   "Non existing id: spotify:playlist:…"   the music is gone, not the device
+//
+// Only the first two are worth a restart. Recovering from the third would
+// tear down a healthy player and transfer playback here to skip a track
+// that is not there; from the fourth, it would cut off the music to fix
+// something a restart cannot. "not found" catches both of the first two
+// and neither of the last two.
+const DEVICE_GONE = /not found|device_not_found/i;
+const NO_ACTIVE_DEVICE = /no active device/i;
 
-const isDeviceGone = (err) => {
+// Every wording Spotify uses for "I will not act, the device is the
+// problem". Used once a recovery is already under way, where the question
+// is no longer whether the device is ours.
+const isAboutTheDevice = (err) => {
   const message = err?.message ?? '';
-  return DEVICE_GONE.test(message)
-    // A 404 whose body carried no explanation at all. On the playback
-    // endpoints that is the device; nothing else we call there can 404.
-    || (err?.status === 404 && /HTTP 404/.test(message));
+  return DEVICE_GONE.test(message) || NO_ACTIVE_DEVICE.test(message);
 };
+
+const isDeviceGone = (err, player) => {
+  const message = err?.message ?? '';
+  if (DEVICE_GONE.test(message)) return true;
+
+  // Spotify gives "no active device" both for a device of ours that has
+  // died and for the ordinary case of nothing playing anywhere — which of
+  // the two it is depends only on how quickly the device deregistered.
+  // The message cannot separate them; our own state can. A healthy player
+  // holds a device id, one that has died does not.
+  if (NO_ACTIVE_DEVICE.test(message)) return !player?.deviceId;
+
+  // A 404 whose body carried no explanation at all. On the playback
+  // endpoints that is the device; nothing else we call there can 404.
+  return err?.status === 404 && /HTTP 404/.test(message);
+};
+
+// One recovery at a time per player. The daemon serves connections
+// concurrently and media keys run commands of their own, so two can meet
+// the dead device at once; restarting twice would kill the player the
+// first restart just spawned and leave the first command waiting out its
+// timeout on a process that no longer exists.
+const recoveries = new WeakMap();
+
+function recoverPlayer(deps) {
+  const existing = recoveries.get(deps.player);
+  if (existing) return existing;
+
+  const inFlight = (async () => {
+    deps.player.restart();
+    await ensureDevice(deps);
+  })();
+  recoveries.set(deps.player, inFlight);
+
+  // Cleared on a separate chain so a failed recovery is reported to the
+  // callers awaiting it, and only to them.
+  inFlight.catch(() => {}).finally(() => {
+    if (recoveries.get(deps.player) === inFlight) recoveries.delete(deps.player);
+  });
+
+  return inFlight;
+}
 
 /**
  * Runs a command, and if the only thing wrong was a device Spotify has
@@ -72,16 +133,38 @@ async function retryOnDeadDevice(deps, attempt, prepare) {
   try {
     return await attempt();
   } catch (err) {
-    if (!isDeviceGone(err)) throw err;
-    deps.player.restart();
+    if (!isDeviceGone(err, deps.player)) throw err;
+    await recoverPlayer(deps);
     if (prepare) await prepare();
-    return attempt();
+
+    // Spotify's transfer is eventually consistent: measured live, the
+    // device needs about another second to count as active. Past this
+    // point the entry heuristic no longer applies — we hold a fresh id by
+    // definition — so any device complaint is the transfer still landing.
+    let last;
+    for (let i = 0; i < RECOVERY_ATTEMPTS; i += 1) {
+      if (i) await delay(RECOVERY_BACKOFF_MS);
+      try {
+        return await attempt();
+      } catch (retryErr) {
+        if (!isAboutTheDevice(retryErr)) throw retryErr;
+        last = retryErr;
+      }
+    }
+    throw last;
   }
 }
 
-// Shorthand for the commands that carry no device id of their own.
+// Shorthand for the commands that carry no device id of their own, and so
+// depend on the transfer having actually landed. Spotify's transfer is
+// eventually consistent and offers no callback; the SDK emitting a state
+// event is the signal that it has become the active player. Without this
+// wait the retry races the transfer and fails the same way it just did.
 const onActiveDevice = (deps, attempt) =>
-  retryOnDeadDevice(deps, attempt, () => activateDevice(deps));
+  retryOnDeadDevice(deps, attempt, async () => {
+    await activateDevice(deps);
+    await deps.player.waitForState?.(TRANSFER_SETTLE_TIMEOUT_MS);
+  });
 
 export async function handleCommand(cmd, deps) {
   const { api, player, shutdown } = deps;

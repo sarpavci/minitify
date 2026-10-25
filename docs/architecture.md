@@ -181,21 +181,48 @@ server-side, and the SDK page does not always get a `not_ready` through
 before it goes — so the daemon keeps handing Spotify an id nobody will
 accept, and every call answers 404.
 
-`retryOnDeadDevice` wraps the commands that need a live device. On a
-404 that names the device it restarts the player, waits for a fresh id,
-and runs the command once more. Once, not in a loop: a second 404 is a
-real failure the user needs to hear about.
+`retryOnDeadDevice` wraps the commands that need a live device: it
+restarts the player, waits for a fresh id, transfers to it, and runs the
+command again.
 
-The test is on the message rather than the status alone. Playing a
-playlist that has been deleted is also a 404, and restarting the player
-for that would cut off whatever is currently playing to fix something a
+Deciding *when* to do that takes more than the status code. Four things
+answer 404 on these endpoints, observed against the live API:
+
+| Message | Means |
+|---|---|
+| `Device not found` | the id we transferred to is dead |
+| `Not found.` | the device went while Spotify still thought it was active |
+| `Player command failed: No active device found` | **either** our device died **or** nothing is playing anywhere |
+| `Non existing id: spotify:…` | the music is gone, not the device |
+
+The first two are always ours. The last is never — restarting the player
+for a deleted playlist would cut off the music to fix something a
 restart cannot.
+
+The third is the interesting one: Spotify gives it both for a device of
+ours that has died and for the ordinary case of nothing playing, and
+which one it is depends only on how fast the device deregistered. The
+message cannot separate them, so the daemon uses what it knows about
+itself instead — **a healthy player holds a device id, one that has died
+does not.**
+
+Once a recovery is under way that heuristic stops applying, because we
+hold a fresh id by definition. Spotify's transfer is also eventually
+consistent: measured live, the device takes about a second more to count
+as active. So the retry is attempted up to three times, 400 ms apart,
+treating any device complaint as the transfer still landing. Only then
+is the failure reported.
+
+Two commands can meet the dead device at once — the daemon serves
+connections concurrently and media keys run commands of their own — so
+the restart is shared through a single in-flight promise. Without that
+the second restart would kill the player the first had just spawned.
 
 ## Testing
 
-135 tests under `test/`, run with `node --test` — bare, with no path
-argument. Passing `test/` makes Node 24 try to resolve the directory as
-a module and fail with `MODULE_NOT_FOUND`.
+The suite lives under `test/` and runs with `node --test` — bare, with
+no path argument. Passing `test/` makes Node 24 try to resolve the
+directory as a module and fail with `MODULE_NOT_FOUND`.
 
 The suite is unit-level and uses real code with injected seams
 (`connectImpl`, `spawnImpl`, `getToken`) rather than mocks. The HTTP

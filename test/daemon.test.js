@@ -310,6 +310,55 @@ test('the player spawns against the page url built from the port', async () => {
   assert.match(seenArgs[0], /^http:\/\/127\.0\.0\.1:4321\/player$/);
 });
 
+test('waitForState settles on any state, playing or paused', async () => {
+  // A transferred device comes back paused, so waitForPlayback never
+  // settles for it. The SDK emits a state event as soon as it is the
+  // active player, which is the signal a transfer has actually landed.
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => fakeChild() });
+  player.start();
+
+  const settled = player.waitForState(1000);
+  player.handleEvent('state', { paused: true, title: 'T' });
+
+  assert.equal(await settled, true);
+  assert.equal(await player.waitForState(10), false, 'and times out when nothing comes');
+});
+
+test('a restart survives the old player exiting afterwards', async () => {
+  // stop() kills the old child and start() spawns its replacement, but the
+  // old child's exit event arrives later. Handling it blindly nulls the
+  // handle to the player that is now live: sends stop reaching it, quit
+  // stops killing it, and the next waitReady spawns a second one.
+  const children = [];
+  const player = createPlayer({
+    pagePort: 1234,
+    spawnImpl: () => { const c = fakeChild(); children.push(c); return c; },
+  });
+
+  player.start();
+  const old = children[0];
+  player.restart();
+  const live = children[1];
+
+  old.emit('exit', 0);                 // late news about a process already replaced
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(player.running, true, 'the replacement is still the live player');
+
+  const written = [];
+  live.stdin.on('data', (d) => written.push(d.toString()));
+  player.handleEvent('ready', { device_id: 'NEW' });
+  player.setOverlay(true);
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(player.deviceId, 'NEW');
+  assert.match(written.join(''), /"type":"overlay"/, 'messages must still reach it');
+
+  player.stop();
+  assert.equal(live.killed, true, 'quit has to be able to kill the live player');
+  assert.equal(children.length, 2, 'no third process may be spawned');
+});
+
 // ── a device id Spotify no longer knows ──────────────────────────────
 // After a sleep the daemon still holds the id the SDK registered, but
 // Spotify has dropped the device. Every call naming it answers 404.
@@ -426,6 +475,133 @@ test('a bare 404 from a playback endpoint counts as a dead device', async () => 
 
   assert.equal(result.ok, true);
   assert.equal(d.state.restarts, 1);
+});
+
+test('nothing playing anywhere is reported, not recovered from', async () => {
+  // "No active device" is the ordinary answer when nothing is playing at
+  // all. Treating it as a dead device would tear down and respawn a player
+  // that is perfectly healthy, then transfer playback to it — taking it
+  // away from the phone it may be on — to skip a track that is not there.
+  const d = recoveringDeps(() => ({
+    next: async () => {
+      const err = new Error('Player command failed: No active device found');
+      err.status = 404;
+      throw err;
+    },
+  }));
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /No active device/);
+  assert.equal(d.state.restarts, 0, 'a healthy player must not be restarted');
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['next'], 'and nothing transferred');
+});
+
+test('a device that died mid-playback is recovered from', async () => {
+  // Observed against the live API: when the device goes while Spotify
+  // still believes it is the active one, a transport command answers 404
+  // "Not found." — not "Device not found", and not the "No active device
+  // found" that means nothing is playing. This is the shape a sleep
+  // leaves behind, so it is the one that matters most.
+  const d = recoveringDeps((state) => ({
+    next: async () => {
+      if (state.deviceId !== 'FRESH') {
+        const err = new Error('Not found.');
+        err.status = 404;
+        throw err;
+      }
+    },
+  }));
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, true);
+  assert.equal(d.state.restarts, 1);
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['next', 'transfer', 'next']);
+});
+
+test('no active device IS our device when we no longer have one', async () => {
+  // Same wording as the nothing-is-playing case above, and Spotify gives
+  // both for the same dead device depending on how fast it deregisters.
+  // The message cannot separate them; our own state can. A healthy player
+  // holds a device id, one that has died does not.
+  const d = recoveringDeps((state) => ({
+    next: async () => {
+      if (state.deviceId !== 'FRESH') {
+        const err = new Error('Player command failed: No active device found');
+        err.status = 404;
+        throw err;
+      }
+    },
+  }));
+  d.state.deviceId = null;          // the player died and took the id with it
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, true);
+  assert.equal(d.state.restarts, 1);
+});
+
+test('the retry waits for the transfer to land before giving up', async () => {
+  // Measured live: the command that triggers the recovery fails, and the
+  // same command a second later works. Spotify's transfer is eventually
+  // consistent, so the device needs a moment to count as active — and by
+  // then we do hold a device id, so the entry heuristic no longer applies.
+  let attempts = 0;
+  const d = recoveringDeps(() => ({
+    next: async () => {
+      attempts += 1;
+      if (attempts >= 3) return;
+      const err = new Error('Player command failed: No active device found');
+      err.status = 404;
+      throw err;
+    },
+  }));
+  d.state.deviceId = null;
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, true);
+  assert.equal(d.state.restarts, 1, 'still only one restart');
+  assert.equal(attempts, 3);
+});
+
+test('two commands meeting the dead device share one recovery', async () => {
+  // The daemon serves connections concurrently and media keys run their own
+  // commands, so two can meet the dead device at once. Restarting twice
+  // kills the player the first restart just spawned, and the first command
+  // then waits five seconds for a process that no longer exists.
+  const state = { restarts: 0, deviceId: 'STALE' };
+  const waiters = [];
+  const d = {
+    api: fakeApi({
+      next: async () => { if (state.deviceId !== 'FRESH') throw deviceGone(); },
+    }),
+    player: {
+      get deviceId() { return state.deviceId; },
+      waitReady: () => new Promise((resolve) => waiters.push(resolve)),
+      lastError: null,
+      stop() {},
+      restart() { state.restarts += 1; state.deviceId = null; },
+      waitForPlayback: async () => true,
+    },
+    shutdown: () => {},
+  };
+
+  const both = Promise.all([
+    handleCommand({ name: 'next' }, d),
+    handleCommand({ name: 'next' }, d),
+  ]);
+
+  await new Promise((r) => setImmediate(r));
+  state.deviceId = 'FRESH';                 // the replacement registers
+  for (const resolve of waiters) resolve('FRESH');
+
+  const results = await both;
+
+  assert.deepEqual(results.map((r) => r.ok), [true, true]);
+  assert.equal(state.restarts, 1, 'one restart, not one per command');
 });
 
 test('a device that is gone twice reports the error instead of looping', async () => {
