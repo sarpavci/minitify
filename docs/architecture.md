@@ -176,6 +176,21 @@ Because 200 is not evidence that sound started, `play` verifies: if the
 player reports no playback within 3 s, the host is restarted and the
 call is made once more.
 
+**A device id that outlives its device.** A sleep drops the device
+server-side, and the SDK page does not always get a `not_ready` through
+before it goes — so the daemon keeps handing Spotify an id nobody will
+accept, and every call answers 404.
+
+`retryOnDeadDevice` wraps the commands that need a live device. On a
+404 that names the device it restarts the player, waits for a fresh id,
+and runs the command once more. Once, not in a loop: a second 404 is a
+real failure the user needs to hear about.
+
+The test is on the message rather than the status alone. Playing a
+playlist that has been deleted is also a 404, and restarting the player
+for that would cut off whatever is currently playing to fix something a
+restart cannot.
+
 ## Testing
 
 135 tests under `test/`, run with `node --test` — bare, with no path

@@ -21,18 +21,25 @@ the retry should have caught it.
 
 ## "Device not found"
 
-The device id the daemon holds is no longer registered. Usually the
-player host was killed, or the machine slept long enough for the SDK
-session to lapse.
+The device id the daemon holds is no longer registered — usually the
+machine slept, which drops the device server-side without the SDK page
+always reporting it.
+
+**This recovers by itself.** Any command that needs a live device throws
+the stale id away, brings the player back, and tries once more; you may
+notice a second's pause on the first command after a wake. The error
+only reaches you if the second attempt fails too, which means something
+other than a dead device is wrong — check the log.
 
 ```sh
-minitify quit
-minitify
+cat ~/.config/minitify/daemon.log
 ```
 
-`play` recovers from this by restarting the host; the `transfer` step
-has no retry of its own yet, which is why you can still meet this error
-on the first command after a sleep.
+Two `sdk ready` lines with a `player exited` between them are the
+recovery working, not a fault.
+
+If a command does keep failing with this, `minitify quit` and start
+again, and please include that stretch of the log in a bug report.
 
 ## Nothing plays, but no error
 

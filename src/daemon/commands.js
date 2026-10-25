@@ -40,6 +40,49 @@ async function activateDevice(deps) {
   return deviceId;
 }
 
+// Spotify answers 404 for a device it no longer has registered. The daemon
+// can still be holding that id: a sleep drops the device server-side, and
+// the SDK page does not always get a not_ready through before it goes.
+//
+// Matched on the message, not on the status alone. Playing a playlist that
+// has been deleted is also a 404, and restarting the player for that would
+// cut off whatever is currently playing to fix something a restart cannot.
+const DEVICE_GONE = /device not found|no active device|device_not_found/i;
+
+const isDeviceGone = (err) => {
+  const message = err?.message ?? '';
+  return DEVICE_GONE.test(message)
+    // A 404 whose body carried no explanation at all. On the playback
+    // endpoints that is the device; nothing else we call there can 404.
+    || (err?.status === 404 && /HTTP 404/.test(message));
+};
+
+/**
+ * Runs a command, and if the only thing wrong was a device Spotify has
+ * dropped, brings the player back and runs it once more.
+ *
+ * Once, deliberately. A second 404 is a real failure and the user needs to
+ * hear it rather than watch the player cycle.
+ *
+ * `prepare` is what makes a device usable again. `play` and `resume`
+ * transfer as part of their own work, so they pass nothing; the commands
+ * that run against whatever device is active have to be handed one.
+ */
+async function retryOnDeadDevice(deps, attempt, prepare) {
+  try {
+    return await attempt();
+  } catch (err) {
+    if (!isDeviceGone(err)) throw err;
+    deps.player.restart();
+    if (prepare) await prepare();
+    return attempt();
+  }
+}
+
+// Shorthand for the commands that carry no device id of their own.
+const onActiveDevice = (deps, attempt) =>
+  retryOnDeadDevice(deps, attempt, () => activateDevice(deps));
+
 export async function handleCommand(cmd, deps) {
   const { api, player, shutdown } = deps;
   const args = cmd.args ?? [];
@@ -66,11 +109,11 @@ export async function handleCommand(cmd, deps) {
           else await api.playContext(uri, deviceId);
         };
 
-        await start();
+        // Two different failures, each needing the same recovery. The call
+        // can throw because the device is gone, or it can answer 200 while
+        // the device has quietly died and no sound comes out.
+        await retryOnDeadDevice(deps, start);
 
-        // Spotify answers 200 even when the target device has quietly died,
-        // so success here is not evidence that music started. If the player
-        // never reports playback, refresh it and try once more.
         if (player.waitForPlayback && !(await player.waitForPlayback(PLAYBACK_START_TIMEOUT_MS))) {
           player.restart();
           await start();
@@ -79,27 +122,28 @@ export async function handleCommand(cmd, deps) {
       }
 
       case 'pause':
-        return ok(await api.pause());
+        return ok(await onActiveDevice(deps, () => api.pause()));
 
-      case 'resume': {
-        const deviceId = await activateDevice(deps);
-        return ok(await api.resume(deviceId));
-      }
+      case 'resume':
+        return ok(await retryOnDeadDevice(deps, async () => {
+          const deviceId = await activateDevice(deps);
+          return api.resume(deviceId);
+        }));
 
       case 'next':
-        return ok(await api.next());
+        return ok(await onActiveDevice(deps, () => api.next()));
 
       case 'prev':
-        return ok(await api.previous());
+        return ok(await onActiveDevice(deps, () => api.previous()));
 
       case 'vol':
-        return ok(await api.setVolume(args[0]));
+        return ok(await onActiveDevice(deps, () => api.setVolume(args[0])));
 
       case 'shuffle': {
         // With no argument this is a toggle, so it needs to know where it
         // is starting from; the daemon keeps that from the SDK's state.
         const next = args[0] === undefined ? !deps.playbackState?.shuffle : Boolean(args[0]);
-        await api.setShuffle(next);
+        await onActiveDevice(deps, () => api.setShuffle(next));
         if (deps.playbackState) deps.playbackState.shuffle = next;
         return ok({ shuffle: next });
       }
@@ -107,7 +151,7 @@ export async function handleCommand(cmd, deps) {
       case 'repeat': {
         const current = deps.playbackState?.repeat ?? 'off';
         const next = args[0] === undefined ? nextRepeat(current) : args[0];
-        await api.setRepeat(next);
+        await onActiveDevice(deps, () => api.setRepeat(next));
         if (deps.playbackState) deps.playbackState.repeat = next;
         return ok({ repeat: next });
       }

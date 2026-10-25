@@ -309,3 +309,133 @@ test('the player spawns against the page url built from the port', async () => {
   player.start();
   assert.match(seenArgs[0], /^http:\/\/127\.0\.0\.1:4321\/player$/);
 });
+
+// ── a device id Spotify no longer knows ──────────────────────────────
+// After a sleep the daemon still holds the id the SDK registered, but
+// Spotify has dropped the device. Every call naming it answers 404.
+
+function deviceGone() {
+  const err = new Error('Device not found');
+  err.status = 404;
+  return err;
+}
+
+function recoveringDeps(apiOverrides) {
+  const state = { restarts: 0, deviceId: 'STALE' };
+  return {
+    state,
+    api: fakeApi(apiOverrides(state)),
+    player: {
+      get deviceId() { return state.deviceId; },
+      waitReady: async () => state.deviceId,
+      lastError: null,
+      stop() {},
+      restart() { state.restarts += 1; state.deviceId = 'FRESH'; },
+      waitForPlayback: async () => true,
+    },
+    shutdown: () => {},
+  };
+}
+
+test('play replaces a device Spotify has dropped and succeeds', async () => {
+  const d = recoveringDeps(() => ({
+    transfer: async (id) => { if (id === 'STALE') throw deviceGone(); },
+  }));
+
+  const result = await handleCommand({ name: 'play', args: ['spotify:track:1'] }, d);
+
+  assert.equal(result.ok, true, 'the second attempt must succeed');
+  assert.equal(d.state.restarts, 1, 'the dead player has to be brought back');
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['transfer', 'transfer', 'playUris']);
+  assert.deepEqual(d.api.calls[1], ['transfer', 'FRESH']);
+});
+
+test('resume replaces a device Spotify has dropped', async () => {
+  const d = recoveringDeps(() => ({
+    transfer: async (id) => { if (id === 'STALE') throw deviceGone(); },
+  }));
+
+  const result = await handleCommand({ name: 'resume' }, d);
+
+  assert.equal(result.ok, true);
+  assert.equal(d.state.restarts, 1);
+});
+
+test('next recovers when no device is active any more', async () => {
+  const d = recoveringDeps((state) => ({
+    next: async () => { if (state.deviceId === 'STALE') throw deviceGone(); },
+  }));
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, true);
+  assert.equal(d.state.restarts, 1);
+  // The retry only works because the fresh device was made active first.
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['next', 'transfer', 'next']);
+});
+
+test('a failure that is not about the device is reported, not retried', async () => {
+  const d = recoveringDeps(() => ({
+    next: async () => {
+      const err = new Error('Service unavailable');
+      err.status = 503;
+      throw err;
+    },
+  }));
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'Service unavailable');
+  assert.equal(d.state.restarts, 0, 'restarting the player cannot fix a 503');
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['next']);
+});
+
+test('a 404 about the music, not the device, never restarts the player', async () => {
+  // Playing a playlist that has been deleted also answers 404. Treating
+  // that as a dead device would kill whatever is currently playing to
+  // recover from something a restart cannot fix.
+  const d = recoveringDeps(() => ({
+    playContext: async () => {
+      const err = new Error('Non existing id: spotify:playlist:gone');
+      err.status = 404;
+      throw err;
+    },
+  }));
+
+  const result = await handleCommand({ name: 'play', args: ['spotify:playlist:gone'] }, d);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Non existing id/);
+  assert.equal(d.state.restarts, 0, 'the music must not be cut off for this');
+});
+
+test('a bare 404 from a playback endpoint counts as a dead device', async () => {
+  // Spotify does not always put a reason in the body; api.js then falls
+  // back to its own wording. On the playback endpoints nothing else 404s.
+  const d = recoveringDeps((state) => ({
+    next: async () => {
+      if (state.deviceId !== 'STALE') return;
+      const err = new Error('Spotify request failed (HTTP 404)');
+      err.status = 404;
+      throw err;
+    },
+  }));
+
+  const result = await handleCommand({ name: 'next' }, d);
+
+  assert.equal(result.ok, true);
+  assert.equal(d.state.restarts, 1);
+});
+
+test('a device that is gone twice reports the error instead of looping', async () => {
+  const d = recoveringDeps(() => ({
+    transfer: async () => { throw deviceGone(); },
+  }));
+
+  const result = await handleCommand({ name: 'play', args: ['spotify:track:1'] }, d);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Device not found/);
+  assert.equal(d.state.restarts, 1, 'exactly one recovery attempt');
+});
