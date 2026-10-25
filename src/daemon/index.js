@@ -55,6 +55,9 @@ export async function startDaemon() {
       player.handleEvent(kind, data);
       if (kind !== 'state') log(`sdk ${kind}: ${JSON.stringify(data)}`);
       if (kind === 'error') log(`sdk error: ${data.kind ?? ''} ${data.message ?? ''}`);
+      // Media keys can arrive from the page's media session as well as
+      // from the Swift host; both land here.
+      if (kind === 'mediakey') runMediaKey(data.command);
       if (kind === 'state') {
         lastState = data;
         player.sendNowPlaying({
@@ -68,18 +71,20 @@ export async function startDaemon() {
     },
   });
 
+  function runMediaKey(command) {
+    const name =
+      command === 'toggle' ? (lastState.paused ? 'resume' : 'pause')
+      : command === 'play' ? 'resume'
+      : command === 'previous' ? 'prev'
+      : command;
+    handleCommand({ name }, { api, player, shutdown }).catch((err) => log(`media key: ${err.message}`));
+  }
+
   player = createPlayer({
     pagePort: httpServer.port,
     pageSecret: secret,
     onLog: log,
-    onMediaKey: (command) => {
-      const name =
-        command === 'toggle' ? (lastState.paused ? 'resume' : 'pause')
-        : command === 'play' ? 'resume'
-        : command === 'previous' ? 'prev'
-        : command;
-      handleCommand({ name }, { api, player, shutdown }).catch((err) => log(`media key: ${err.message}`));
-    },
+    onMediaKey: runMediaKey,
   });
 
   player.start();

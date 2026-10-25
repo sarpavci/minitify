@@ -112,19 +112,19 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
     }
 
-    private func updateNowPlaying(_ message: [String: Any]) {
-        let playing = message["playing"] as? Bool ?? false
-        var info: [String: Any] = [:]
-
-        info[MPMediaItemPropertyTitle] = message["title"] as? String ?? ""
-        info[MPMediaItemPropertyArtist] = message["artist"] as? String ?? ""
-        info[MPMediaItemPropertyPlaybackDuration] = (message["durationMs"] as? Double ?? 0) / 1000
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = (message["positionMs"] as? Double ?? 0) / 1000
-        info[MPNowPlayingInfoPropertyPlaybackRate] = playing ? 1.0 : 0.0
-
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-        MPNowPlayingInfoCenter.default().playbackState = playing ? .playing : .paused
-    }
+    // Deliberately does not touch MPNowPlayingInfoCenter.
+    //
+    // The SDK always registers a media session of its own, and suppressing
+    // it breaks playback. Publishing a second one here produced two
+    // entries in Control Center and split the media keys between them —
+    // the first press after focusing another app went to whichever was
+    // most recently active. The page now fills the SDK's entry with the
+    // real track instead, so this process stays out of Now Playing and
+    // one correct entry remains.
+    //
+    // The stdin loop is still what tells us the daemon died, so the
+    // messages are read and discarded rather than ignored.
+    private func updateNowPlaying(_ message: [String: Any]) {}
 }
 
 // MARK: entry point

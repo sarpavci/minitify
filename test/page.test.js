@@ -22,15 +22,32 @@ test('playerPage loads the official SDK', () => {
   assert.ok(playerPage('t', 'd').includes('https://sdk.scdn.co/spotify-player.js'));
 });
 
-// Replacing navigator.mediaSession with an inert object to suppress the
-// SDK's "Spotify Embedded Player" entry broke playback outright: the SDK
-// depends on it and answered with playback_error. The duplicate Now
-// Playing entry stays for now; see README "Known limits".
-test('playerPage leaves navigator.mediaSession alone', () => {
+// Replacing navigator.mediaSession with an inert object broke playback —
+// the SDK depends on it. So instead of suppressing it, the page writes the
+// real track into it and claims its action handlers, which lets the Swift
+// host drop its own Now Playing entry and leaves one correct entry.
+test('playerPage leaves navigator.mediaSession usable by the SDK', () => {
   assert.ok(
     !playerPage('t', 'd').includes('defineProperty(navigator'),
     'the SDK needs a working media session',
   );
+});
+
+test('playerPage writes the current track into the media session', () => {
+  const html = playerPage('t', 'd');
+  assert.ok(html.includes('MediaMetadata'), 'metadata must be published');
+  assert.ok(html.includes('mediaSession.playbackState'), 'play state must be published');
+});
+
+test('playerPage claims the media session action handlers', () => {
+  const html = playerPage('t', 'd');
+  for (const action of ['previoustrack', 'nexttrack', 'play', 'pause']) {
+    assert.ok(html.includes(`'${action}'`), `missing handler for ${action}`);
+  }
+});
+
+test('media session actions are reported as media keys', () => {
+  assert.ok(playerPage('t', 'd').includes("report('mediakey'"), 'actions must reach the daemon');
 });
 
 test('the server serves the page at /player', async () => {
