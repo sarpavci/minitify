@@ -28,3 +28,19 @@ jobs:
 
       - name: Confirm the binary runs headless-safe
         run: test -x player/wkplayer
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Relative links resolve
+        run: python3 tools/check-links.py
+
+      # The mark is generated, so a hand-edited SVG would drift silently
+      # away from the geometry documented in docs/design.md.
+      - name: The committed mark matches its generator
+        run: |
+          python3 tools/make-mark.py
+          git diff --exit-code -- .github/assets
