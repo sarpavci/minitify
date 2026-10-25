@@ -9,6 +9,7 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
   let lastError = null;
   let waiters = [];
   let playbackWaiters = [];
+  let stateWaiters = [];
   let overlayVisible = false;
 
   const log = (line) => onLog?.(line);
@@ -28,6 +29,28 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       resolve(true);
     }
     playbackWaiters = [];
+  }
+
+  function settleState() {
+    for (const { resolve, timer } of stateWaiters) {
+      clearTimeout(timer);
+      resolve(true);
+    }
+    stateWaiters = [];
+  }
+
+  // Shared by waitForPlayback and waitForState: resolve false on timeout
+  // rather than rejecting, because neither is an error — the caller is
+  // asking whether something happened, not demanding that it did.
+  function waitFor(list, timeoutMs) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const i = list.findIndex((w) => w.timer === timer);
+        if (i !== -1) list.splice(i, 1);
+        resolve(false);
+      }, timeoutMs);
+      list.push({ resolve, timer });
+    });
   }
 
   function send(message) {
@@ -77,9 +100,20 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       const url = `http://127.0.0.1:${pagePort}/player${pageSecret ? `?k=${pageSecret}` : ''}`;
       child = spawnImpl(binPath, [url], { stdio: ['pipe', 'pipe', 'pipe'] });
 
+      // A restart spawns the replacement before the old child's exit event
+      // arrives. Acting on that late news would null the handle to the
+      // player that is now live — sends would stop reaching it, quit would
+      // stop killing it, and the next waitReady would spawn a second one.
+      const spawned = child;
+      const isCurrent = () => spawned === child;
+
+      // Whatever error the dead player left behind is not this one's.
+      lastError = null;
+
       // Without this listener a missing or unbuilt binary emits an
       // unhandled 'error' and takes the whole daemon down.
-      child.on?.('error', (err) => {
+      spawned.on?.('error', (err) => {
+        if (!isCurrent()) return;
         lastError = err.code === 'ENOENT'
           ? `The player binary is missing — build it with: sh player/build.sh`
           : `The player could not start: ${err.message}`;
@@ -88,7 +122,8 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       });
 
       let buffer = '';
-      child.stdout?.on('data', (chunk) => {
+      spawned.stdout?.on('data', (chunk) => {
+        if (!isCurrent()) return;
         buffer += chunk;
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
@@ -96,12 +131,13 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       });
 
       // stderr is piped, so it has to be drained — an undrained pipe fills
-      // at 64 KB and blocks the player's writes.
-      child.stderr?.on('data', (chunk) => log(`[player] ${chunk.toString().trim()}`));
+      // at 64 KB and blocks the player's writes. Drained even for a
+      // replaced child, which may still be on its way out.
+      spawned.stderr?.on('data', (chunk) => log(`[player] ${chunk.toString().trim()}`));
 
-      child.on?.('exit', (code) => {
+      spawned.on?.('exit', (code) => {
         log(`player exited (code ${code})`);
-        player.handleExit();
+        if (isCurrent()) player.handleExit();
       });
 
       // A player that died while the overlay was up comes back with it up.
@@ -121,19 +157,24 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       if (kind === 'ready') settleReady(data.device_id);
       else if (kind === 'not_ready') deviceId = null;
       else if (kind === 'error') lastError = data.message || data.kind;
-      else if (kind === 'state' && !data.paused) settlePlayback();
+      else if (kind === 'state') {
+        settleState();
+        if (!data.paused) settlePlayback();
+      }
     },
 
     // Resolves once the SDK reports it is actually playing. The web API
     // returning 200 does not mean sound came out.
     waitForPlayback(timeoutMs = 3000) {
-      return new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          playbackWaiters = playbackWaiters.filter((w) => w.timer !== timer);
-          resolve(false);
-        }, timeoutMs);
-        playbackWaiters.push({ resolve, timer });
-      });
+      return waitFor(playbackWaiters, timeoutMs);
+    },
+
+    // Resolves on any state at all. The SDK emits one as soon as it is the
+    // active player, which is how a transfer announces that it landed — and
+    // a transferred device comes back paused, so waitForPlayback is no use
+    // for that.
+    waitForState(timeoutMs = 3000) {
+      return waitFor(stateWaiters, timeoutMs);
     },
 
     restart() {
