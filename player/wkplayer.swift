@@ -21,6 +21,7 @@ func emit(_ object: [String: Any]) {
 final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
+    var overlay: OverlayController!
     let pageURL: URL
 
     init(pageURL: URL) {
@@ -43,6 +44,17 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         window.orderOut(nil)
 
         webView.load(URLRequest(url: pageURL))
+
+        // The overlay's buttons travel the same path as the media keys, so
+        // the daemon handles both with one code path.
+        overlay = OverlayController { [weak self] action in
+            if action == "close" {
+                self?.overlay.hide()
+                emit(["type": "overlay", "show": false])
+            } else {
+                emit(["type": "mediakey", "command": action])
+            }
+        }
 
         registerMediaKeys()
         readCommands()
@@ -100,8 +112,20 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             while let line = readLine(strippingNewline: true) {
                 guard let data = line.data(using: .utf8),
                       let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                      message["type"] as? String == "nowplaying" else { continue }
-                DispatchQueue.main.async { self.updateNowPlaying(message) }
+                      let type = message["type"] as? String else { continue }
+
+                DispatchQueue.main.async {
+                    switch type {
+                    case "nowplaying":
+                        self.updateNowPlaying(message)
+                        self.overlay.apply(message)
+                    case "overlay":
+                        if message["show"] as? Bool == true { self.overlay.show() }
+                        else { self.overlay.hide() }
+                    default:
+                        break
+                    }
+                }
             }
 
             // stdin closed: the daemon is gone. Nothing can reach this
@@ -129,14 +153,22 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
 // MARK: entry point
 
-guard CommandLine.arguments.count > 1, let url = URL(string: CommandLine.arguments[1]) else {
-    emit(["type": "error", "message": "usage: wkplayer <page-url>"])
-    exit(2)
-}
+// Top-level code is only allowed in main.swift once there is more than one
+// file, so the entry point is explicit instead.
+@main
+enum Player {
+    static func main() {
+        guard CommandLine.arguments.count > 1,
+              let url = URL(string: CommandLine.arguments[1]) else {
+            emit(["type": "error", "message": "usage: wkplayer <page-url>"])
+            exit(2)
+        }
 
-let app = NSApplication.shared
-// .accessory keeps the process out of the dock and the app switcher.
-app.setActivationPolicy(.accessory)
-let delegate = Delegate(pageURL: url)
-app.delegate = delegate
-app.run()
+        let app = NSApplication.shared
+        // .accessory keeps the process out of the dock and the app switcher.
+        app.setActivationPolicy(.accessory)
+        let delegate = Delegate(pageURL: url)
+        app.delegate = delegate
+        app.run()
+    }
+}
