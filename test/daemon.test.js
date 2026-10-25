@@ -1,0 +1,180 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+
+import { handleCommand } from '../src/daemon/commands.js';
+import { createPlayer } from '../src/player/control.js';
+
+function fakeApi(overrides = {}) {
+  const calls = [];
+  const record = (name) => async (...args) => {
+    calls.push([name, ...args]);
+    return overrides[name]?.(...args);
+  };
+  return {
+    calls,
+    listPlaylists: record('listPlaylists'),
+    search: record('search'),
+    status: record('status'),
+    playContext: record('playContext'),
+    playUris: record('playUris'),
+    transfer: record('transfer'),
+    pause: record('pause'),
+    resume: record('resume'),
+    next: record('next'),
+    previous: record('previous'),
+    setVolume: record('setVolume'),
+  };
+}
+
+function deps(extra = {}) {
+  return {
+    api: fakeApi(),
+    player: { deviceId: 'DEV', waitReady: async () => 'DEV', lastError: null, stop() {} },
+    shutdown: () => {},
+    ...extra,
+  };
+}
+
+test('handleCommand routes pause to api.pause', async () => {
+  const d = deps();
+  const result = await handleCommand({ name: 'pause' }, d);
+  assert.equal(result.ok, true);
+  assert.deepEqual(d.api.calls[0], ['pause']);
+});
+
+test('handleCommand routes next and prev', async () => {
+  const d = deps();
+  await handleCommand({ name: 'next' }, d);
+  await handleCommand({ name: 'prev' }, d);
+  assert.deepEqual(d.api.calls.map((c) => c[0]), ['next', 'previous']);
+});
+
+test('handleCommand returns ok:false for an unknown command', async () => {
+  const result = await handleCommand({ name: 'fly' }, deps());
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Unknown command/);
+});
+
+test('handleCommand passes the device id when starting playback', async () => {
+  const d = deps();
+  await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, d);
+  assert.deepEqual(d.api.calls[0], ['playContext', 'spotify:playlist:1', 'DEV']);
+});
+
+test('handleCommand plays a track uri through playUris', async () => {
+  const d = deps();
+  await handleCommand({ name: 'play', args: ['spotify:track:9'] }, d);
+  assert.equal(d.api.calls[0][0], 'playUris');
+  assert.deepEqual(d.api.calls[0][1], ['spotify:track:9']);
+});
+
+test('handleCommand surfaces a 429 retryAfter in the error text', async () => {
+  const api = fakeApi({
+    next: () => {
+      const err = new Error('rate');
+      err.status = 429;
+      err.retryAfter = 18;
+      throw err;
+    },
+  });
+  const result = await handleCommand({ name: 'next' }, deps({ api }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /18/);
+});
+
+test('a stored SDK error is returned instead of a generic failure', async () => {
+  const player = {
+    deviceId: null,
+    lastError: 'Account error: premium required',
+    waitReady: async () => {
+      throw new Error('player not ready');
+    },
+    stop() {},
+  };
+  const result = await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, deps({ player }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /premium required/);
+});
+
+test('handleCommand reports volume validation errors', async () => {
+  const api = fakeApi({
+    setVolume: () => {
+      throw new Error('Volume must be between 0 and 100');
+    },
+  });
+  const result = await handleCommand({ name: 'vol', args: [150] }, deps({ api }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /between 0 and 100/);
+});
+
+test('quit asks the daemon to shut down', async () => {
+  let stopped = false;
+  const result = await handleCommand({ name: 'quit' }, deps({ shutdown: () => { stopped = true; } }));
+  assert.equal(result.ok, true);
+  assert.equal(stopped, true);
+});
+
+// --- player control ---
+
+function fakeChild() {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  child.kill = () => { child.killed = true; };
+  return child;
+}
+
+test('createPlayer resolves waitReady when the ready event arrives', async () => {
+  const child = fakeChild();
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => child });
+  player.start();
+  player.handleEvent('ready', { device_id: 'ABC' });
+  assert.equal(await player.waitReady(1000), 'ABC');
+  assert.equal(player.deviceId, 'ABC');
+});
+
+test('waitReady rejects after the timeout', async () => {
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => fakeChild() });
+  player.start();
+  await assert.rejects(() => player.waitReady(20), /not ready/);
+});
+
+test('createPlayer records the last SDK error', async () => {
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => fakeChild() });
+  player.start();
+  player.handleEvent('error', { kind: 'account_error', message: 'premium required' });
+  assert.match(player.lastError, /premium required/);
+});
+
+test('a media key line from the player invokes the callback', async () => {
+  const child = fakeChild();
+  const seen = [];
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => child, onMediaKey: (c) => seen.push(c) });
+  player.start();
+  child.stdout.write('{"type":"mediakey","command":"toggle"}\n');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(seen, ['toggle']);
+});
+
+test('sendNowPlaying writes one json line to the player', async () => {
+  const child = fakeChild();
+  const written = [];
+  child.stdin.on('data', (d) => written.push(d.toString()));
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => child });
+  player.start();
+  player.sendNowPlaying({ title: 'T', artist: 'A', durationMs: 1000, positionMs: 10, playing: true });
+  await new Promise((r) => setImmediate(r));
+  const line = JSON.parse(written.join(''));
+  assert.equal(line.type, 'nowplaying');
+  assert.equal(line.title, 'T');
+});
+
+test('the player spawns against the page url built from the port', async () => {
+  let seenArgs;
+  const player = createPlayer({ pagePort: 4321, spawnImpl: (bin, args) => { seenArgs = args; return fakeChild(); } });
+  player.start();
+  assert.match(seenArgs[0], /^http:\/\/127\.0\.0\.1:4321\/player$/);
+});
