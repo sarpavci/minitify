@@ -4,13 +4,16 @@ A small Spotify remote for the terminal. Audio plays on this Mac, but
 nothing appears in the dock and no Spotify app runs.
 
 ```
-minitify                 pick a playlist
-minitify search <words>  pick from search results
-minitify status          what is playing
+minitify                      pick a playlist
+minitify search <words>       pick from search results
+minitify status               what is playing
 minitify next | prev | pause
 minitify vol <0-100>
-minitify login           first-time setup
-minitify quit            stop the background player
+minitify shuffle [on|off]     toggles without an argument
+minitify repeat [off|all|one] cycles without an argument
+minitify overlay [on|off]     the floating mini-player
+minitify login                first-time setup
+minitify quit                 stop the background player
 ```
 
 Pick something, press Enter, and the command exits — the music keeps
@@ -37,6 +40,20 @@ uses 400–600 MB and occupies the dock.
 Media keys work: play/pause, next and previous are picked up through
 `MPRemoteCommandCenter`, and the current track is published to
 `MPNowPlayingInfoCenter`, so it also shows up in Control Center.
+
+## The overlay
+
+`minitify overlay` raises a 380×76 floating panel with the album art, the
+track, and transport, shuffle and repeat controls. It sits above every
+window, follows you across Spaces, stays visible over full-screen apps and
+never takes keyboard focus, so clicking it does not interrupt what you are
+typing in. Drag it by its background; it remembers where you left it.
+
+Its buttons travel the same path as the hardware media keys, which makes
+them a reliable way to skip tracks regardless of which app has focus.
+
+The panel is a borderless non-activating `NSPanel` using the `.hudWindow`
+material, drawn to the measurements in the design handoff.
 
 ## Setup
 
@@ -83,6 +100,10 @@ No dependencies, no `node_modules`, no install step.
   `playback_error`. As a side effect, the first media-key press after
   focusing another app may land on the SDK's entry and do nothing; press
   play/pause once and next/previous work from then on.
+- **Spotify sometimes ignores a repeat change.** The endpoint answers 200
+  and the mode stays where it was, usually after several changes in quick
+  succession. Nothing is lost: the overlay reflects the SDK's own state,
+  so it always shows what is actually set rather than what was asked for.
 - The player is not covered by automated tests: DRM, audio output and
   media keys cannot be faked in a test environment. They are verified by
   hand.
