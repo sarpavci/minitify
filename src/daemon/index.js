@@ -42,8 +42,10 @@ export async function startDaemon() {
   // Guards the loopback endpoints that hand out a live access token.
   const secret = randomBytes(16).toString('hex');
 
-  // Remembered so a media key can toggle without asking Spotify first.
+  // Remembered so a media key can toggle, and so shuffle/repeat know what
+  // they are cycling from, without asking Spotify first.
   let lastState = { paused: true };
+  const playbackState = { shuffle: false, repeat: 'off' };
   let player;
 
   const httpServer = await startHttpServer({
@@ -57,12 +59,17 @@ export async function startDaemon() {
       if (kind === 'error') log(`sdk error: ${data.kind ?? ''} ${data.message ?? ''}`);
       if (kind === 'state') {
         lastState = data;
+        playbackState.shuffle = Boolean(data.shuffle);
+        playbackState.repeat = data.repeat ?? 'off';
         player.sendNowPlaying({
           title: data.title,
           artist: data.artist,
           durationMs: data.durationMs,
           positionMs: data.positionMs,
           playing: !data.paused,
+          artworkUrl: data.artworkUrl ?? null,
+          shuffle: playbackState.shuffle,
+          repeat: playbackState.repeat,
         });
       }
     },
@@ -78,7 +85,7 @@ export async function startDaemon() {
         : command === 'play' ? 'resume'
         : command === 'previous' ? 'prev'
         : command;
-      handleCommand({ name }, { api, player, shutdown }).catch((err) => log(`media key: ${err.message}`));
+      handleCommand({ name }, { api, player, shutdown, playbackState }).catch((err) => log(`media key: ${err.message}`));
     },
   });
 
@@ -96,7 +103,7 @@ export async function startDaemon() {
 
       let result;
       try {
-        result = await handleCommand(JSON.parse(line), { api, player, shutdown });
+        result = await handleCommand(JSON.parse(line), { api, player, shutdown, playbackState });
       } catch (err) {
         result = { ok: false, error: err.message };
       }

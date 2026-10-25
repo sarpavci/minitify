@@ -94,6 +94,54 @@ test('a reloading notice clears the stale device id', async () => {
   assert.match(player.lastError, /content process/);
 });
 
+test('setOverlay writes an overlay line and tracks visibility', async () => {
+  const child = fakeChild();
+  const written = [];
+  child.stdin.on('data', (d) => written.push(d.toString()));
+  const player = createPlayer({ pagePort: 1, spawnImpl: () => child });
+  player.start();
+
+  assert.equal(player.overlayVisible, false, 'hidden until asked');
+  player.setOverlay(true);
+  await new Promise((r) => setImmediate(r));
+
+  const line = JSON.parse(written.join('').trim());
+  assert.equal(line.type, 'overlay');
+  assert.equal(line.show, true);
+  assert.equal(player.overlayVisible, true);
+});
+
+test('a dismissed overlay reported by the player updates visibility', async () => {
+  const child = fakeChild();
+  const player = createPlayer({ pagePort: 1, spawnImpl: () => child });
+  player.start();
+  player.setOverlay(true);
+
+  // The user clicked the panel's own close button.
+  child.stdout.write('{"type":"overlay","show":false}\n');
+  await new Promise((r) => setImmediate(r));
+
+  assert.equal(player.overlayVisible, false, 'the daemon must learn about it');
+});
+
+test('a restarted player reopens an overlay that was visible', async () => {
+  const children = [];
+  const player = createPlayer({
+    pagePort: 1,
+    spawnImpl: () => { const c = fakeChild(); children.push(c); return c; },
+  });
+  player.start();
+  player.setOverlay(true);
+
+  player.handleExit();
+  player.start();
+
+  const written = [];
+  children[1].stdin.on('data', (d) => written.push(d.toString()));
+  await new Promise((r) => setImmediate(r));
+  assert.match(written.join(''), /"type":"overlay".*"show":true/);
+});
+
 test('the player is restarted after its process dies', async () => {
   let spawns = 0;
   const player = createPlayer({

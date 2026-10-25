@@ -117,6 +117,8 @@ test('status maps the playback payload', async () => {
     positionMs: 1234,
     durationMs: 9999,
     deviceName: 'minitify',
+    shuffle: false,
+    repeat: 'off',
   });
 });
 
@@ -179,6 +181,61 @@ test('next survives the same non-JSON body', async () => {
 test('a non-2xx response with a non-JSON body still throws', async () => {
   const f = stubFetch({ status: 500, rawText: 'upstream exploded' });
   await assert.rejects(() => api(f).pause(), /HTTP 500/);
+});
+
+// Verified against the real API: both endpoints answer 200 and the state
+// reads back from /me/player as shuffle_state and repeat_state.
+test('setShuffle sends the state as a query parameter', async () => {
+  const f = stubFetch({ status: 200, rawText: 'opaque' });
+  await api(f).setShuffle(true);
+  const url = new URL(f.calls[0].url);
+  assert.match(url.pathname, /\/me\/player\/shuffle$/);
+  assert.equal(url.searchParams.get('state'), 'true');
+});
+
+test('setShuffle sends false as a string, not an empty value', async () => {
+  const f = stubFetch({ status: 200, rawText: 'opaque' });
+  await api(f).setShuffle(false);
+  assert.equal(new URL(f.calls[0].url).searchParams.get('state'), 'false');
+});
+
+test('setRepeat accepts the three Spotify modes', async () => {
+  for (const mode of ['off', 'context', 'track']) {
+    const f = stubFetch({ status: 200, rawText: 'opaque' });
+    await api(f).setRepeat(mode);
+    assert.equal(new URL(f.calls[0].url).searchParams.get('state'), mode);
+  }
+});
+
+test('setRepeat rejects a mode Spotify does not know', async () => {
+  const f = stubFetch({ status: 200 });
+  await assert.rejects(() => api(f).setRepeat('sometimes'), /off, context or track/);
+  assert.equal(f.calls.length, 0, 'no request should reach Spotify');
+});
+
+test('status reports the shuffle and repeat state', async () => {
+  const f = stubFetch({
+    body: {
+      is_playing: true,
+      progress_ms: 0,
+      shuffle_state: true,
+      repeat_state: 'track',
+      item: { name: 'T', duration_ms: 1, artists: [{ name: 'A' }] },
+      device: { name: 'd' },
+    },
+  });
+  const s = await api(f).status();
+  assert.equal(s.shuffle, true);
+  assert.equal(s.repeat, 'track');
+});
+
+test('status defaults shuffle and repeat when Spotify omits them', async () => {
+  const f = stubFetch({
+    body: { is_playing: false, item: { name: 'T', artists: [] }, device: {} },
+  });
+  const s = await api(f).status();
+  assert.equal(s.shuffle, false);
+  assert.equal(s.repeat, 'off');
 });
 
 test('transfer posts the device id', async () => {

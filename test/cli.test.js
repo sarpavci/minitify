@@ -46,6 +46,42 @@ test('parseArgs passes the simple control commands through', () => {
   }
 });
 
+test('parseArgs takes overlay with no argument as a toggle', () => {
+  assert.deepEqual(parseArgs(['overlay']), { name: 'overlay', args: [] });
+});
+
+test('parseArgs passes overlay on and off through', () => {
+  assert.deepEqual(parseArgs(['overlay', 'on']), { name: 'overlay', args: ['on'] });
+  assert.deepEqual(parseArgs(['overlay', 'off']), { name: 'overlay', args: ['off'] });
+});
+
+test('parseArgs rejects an overlay argument that is neither on nor off', () => {
+  assert.throws(() => parseArgs(['overlay', 'maybe']), /on or off/);
+});
+
+test('parseArgs takes shuffle with no argument as a toggle', () => {
+  assert.deepEqual(parseArgs(['shuffle']), { name: 'shuffle', args: [] });
+});
+
+test('parseArgs reads shuffle on and off as booleans', () => {
+  assert.deepEqual(parseArgs(['shuffle', 'on']), { name: 'shuffle', args: [true] });
+  assert.deepEqual(parseArgs(['shuffle', 'off']), { name: 'shuffle', args: [false] });
+});
+
+test('parseArgs takes repeat with no argument as a cycle', () => {
+  assert.deepEqual(parseArgs(['repeat']), { name: 'repeat', args: [] });
+});
+
+test('parseArgs maps the friendly repeat words to Spotify modes', () => {
+  assert.deepEqual(parseArgs(['repeat', 'off']), { name: 'repeat', args: ['off'] });
+  assert.deepEqual(parseArgs(['repeat', 'all']), { name: 'repeat', args: ['context'] });
+  assert.deepEqual(parseArgs(['repeat', 'one']), { name: 'repeat', args: ['track'] });
+});
+
+test('parseArgs rejects a repeat mode nobody has', () => {
+  assert.throws(() => parseArgs(['repeat', 'twice']), /off, all or one/);
+});
+
 test('parseArgs rejects an unknown command', () => {
   assert.throws(() => parseArgs(['fly']), /Unknown command/);
 });

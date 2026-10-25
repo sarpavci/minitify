@@ -33,6 +33,15 @@ test('playerPage leaves navigator.mediaSession alone', () => {
   );
 });
 
+// The overlay draws the album art and reflects shuffle/repeat, so the
+// state event has to carry them.
+test('the page reports artwork, shuffle and repeat in its state event', () => {
+  const html = playerPage('t', 'd');
+  assert.ok(html.includes('artworkUrl'), 'artwork url must be reported');
+  assert.ok(html.includes('shuffle'), 'shuffle must be reported');
+  assert.ok(html.includes('repeat_mode'), 'repeat mode must be read from the SDK state');
+});
+
 test('the server serves the page at /player', async () => {
   const server = await startHttpServer({ token: 'T', deviceName: 'd', onEvent: () => {} });
   try {

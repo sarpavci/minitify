@@ -6,6 +6,9 @@ export const SEARCH_LIMIT = 10;
 const PLAYLIST_PAGE_LIMIT = 50;
 const MAX_PLAYLIST_PAGES = 20;
 
+// Spotify's repeat cycles through these, in this order.
+export const REPEAT_MODES = ['off', 'context', 'track'];
+
 function artistsOf(item) {
   return (item?.artists ?? []).map((a) => a.name).join(', ');
 }
@@ -91,6 +94,8 @@ export function createApi({ getToken, fetchImpl = fetch }) {
         positionMs: data.progress_ms ?? 0,
         durationMs: data.item.duration_ms ?? 0,
         deviceName: data.device?.name ?? null,
+        shuffle: Boolean(data.shuffle_state),
+        repeat: data.repeat_state ?? 'off',
       };
     },
 
@@ -121,6 +126,18 @@ export function createApi({ getToken, fetchImpl = fetch }) {
 
     previous() {
       return request('POST', '/me/player/previous');
+    },
+
+    setShuffle(on) {
+      return request('PUT', `/me/player/shuffle?state=${on ? 'true' : 'false'}`);
+    },
+
+    // Spotify's repeat is three-state, not a toggle.
+    setRepeat(mode) {
+      if (!REPEAT_MODES.includes(mode)) {
+        return Promise.reject(new Error('Repeat must be off, context or track'));
+      }
+      return request('PUT', `/me/player/repeat?state=${mode}`);
     },
 
     setVolume(percent) {

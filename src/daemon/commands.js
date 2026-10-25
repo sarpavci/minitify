@@ -1,5 +1,10 @@
+import { REPEAT_MODES } from '../spotify/api.js';
+
 const PLAYER_READY_TIMEOUT_MS = 5000;
 const PLAYBACK_START_TIMEOUT_MS = 3000;
+
+const nextRepeat = (mode) =>
+  REPEAT_MODES[(REPEAT_MODES.indexOf(mode) + 1) % REPEAT_MODES.length];
 
 const ok = (data = null) => ({ ok: true, data });
 const fail = (error) => ({ ok: false, error });
@@ -89,6 +94,35 @@ export async function handleCommand(cmd, deps) {
 
       case 'vol':
         return ok(await api.setVolume(args[0]));
+
+      case 'shuffle': {
+        // With no argument this is a toggle, so it needs to know where it
+        // is starting from; the daemon keeps that from the SDK's state.
+        const next = args[0] === undefined ? !deps.playbackState?.shuffle : Boolean(args[0]);
+        await api.setShuffle(next);
+        if (deps.playbackState) deps.playbackState.shuffle = next;
+        return ok({ shuffle: next });
+      }
+
+      case 'repeat': {
+        const current = deps.playbackState?.repeat ?? 'off';
+        const next = args[0] === undefined ? nextRepeat(current) : args[0];
+        await api.setRepeat(next);
+        if (deps.playbackState) deps.playbackState.repeat = next;
+        return ok({ repeat: next });
+      }
+
+      case 'overlay': {
+        const arg = args[0];
+        const show =
+          arg === 'on' ? true
+          : arg === 'off' ? false
+          : !player.overlayVisible;
+        // The panel lives in the player process, so it has to be running.
+        if (show) await ensureDevice(deps);
+        player.setOverlay(show);
+        return ok({ overlay: show });
+      }
 
       case 'quit':
         shutdown();

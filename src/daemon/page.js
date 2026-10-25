@@ -48,12 +48,22 @@ window.onSpotifyWebPlaybackSDKReady = function () {
   player.addListener('player_state_changed', function (s) {
     if (!s) return;
     const t = s.track_window && s.track_window.current_track;
+    const images = (t && t.album && t.album.images) || [];
+    // Smallest image that is still big enough for a 56pt @3x slot.
+    const art = images
+      .filter(function (i) { return (i.width || 0) >= 160; })
+      .sort(function (a, b) { return (a.width || 0) - (b.width || 0); })[0] || images[0];
+
     report('state', {
       paused: s.paused,
       positionMs: s.position,
       title: t ? t.name : null,
       artist: t ? (t.artists || []).map(function (a) { return a.name; }).join(', ') : null,
       durationMs: s.duration || (t && t.duration_ms) || 0,
+      artworkUrl: art ? art.url : null,
+      shuffle: Boolean(s.shuffle),
+      // The SDK reports repeat as 0/1/2; translate to Spotify's own words.
+      repeat: ['off', 'context', 'track'][s.repeat_mode] || 'off',
     });
   });
 

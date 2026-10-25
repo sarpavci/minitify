@@ -9,6 +9,7 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
   let lastError = null;
   let waiters = [];
   let playbackWaiters = [];
+  let overlayVisible = false;
 
   const log = (line) => onLog?.(line);
 
@@ -29,6 +30,11 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
     playbackWaiters = [];
   }
 
+  function send(message) {
+    if (!child?.stdin) return;
+    child.stdin.write(JSON.stringify(message) + '\n');
+  }
+
   function handleLine(line) {
     let message;
     try {
@@ -37,6 +43,10 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       return; // the player only ever writes JSON; anything else is noise
     }
     if (message.type === 'mediakey') onMediaKey?.(message.command);
+    // The panel's own close button dismisses it, so the daemon has to
+    // learn about it or the next `minitify overlay` would try to hide an
+    // already-hidden panel.
+    else if (message.type === 'overlay') overlayVisible = Boolean(message.show);
     else if (message.type === 'error') lastError = message.message;
     else if (message.type === 'reloading') {
       // WebKit killed the content process and the page is coming back.
@@ -94,6 +104,9 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
         player.handleExit();
       });
 
+      // A player that died while the overlay was up comes back with it up.
+      if (overlayVisible) send({ type: 'overlay', show: true });
+
       return child;
     },
 
@@ -143,9 +156,17 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       });
     },
 
+    get overlayVisible() {
+      return overlayVisible;
+    },
+
+    setOverlay(show) {
+      overlayVisible = Boolean(show);
+      send({ type: 'overlay', show: overlayVisible });
+    },
+
     sendNowPlaying(info) {
-      if (!child?.stdin) return;
-      child.stdin.write(JSON.stringify({ type: 'nowplaying', ...info }) + '\n');
+      send({ type: 'nowplaying', ...info });
     },
 
     stop() {

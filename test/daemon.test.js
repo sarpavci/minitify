@@ -25,6 +25,8 @@ function fakeApi(overrides = {}) {
     next: record('next'),
     previous: record('previous'),
     setVolume: record('setVolume'),
+    setShuffle: record('setShuffle'),
+    setRepeat: record('setRepeat'),
   };
 }
 
@@ -161,6 +163,81 @@ test('handleCommand reports volume validation errors', async () => {
   const result = await handleCommand({ name: 'vol', args: [150] }, deps({ api }));
   assert.equal(result.ok, false);
   assert.match(result.error, /between 0 and 100/);
+});
+
+test('shuffle toggles against the last known state', async () => {
+  const d = deps();
+  d.playbackState = { shuffle: false, repeat: 'off' };
+  await handleCommand({ name: 'shuffle' }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setShuffle', true]);
+
+  d.playbackState.shuffle = true;
+  await handleCommand({ name: 'shuffle' }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setShuffle', false]);
+});
+
+test('shuffle accepts an explicit state', async () => {
+  const d = deps();
+  d.playbackState = { shuffle: true, repeat: 'off' };
+  await handleCommand({ name: 'shuffle', args: [false] }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setShuffle', false]);
+});
+
+// Spotify's repeat is a three-way cycle, so the button has to walk it.
+test('repeat cycles off then context then track then back', async () => {
+  const d = deps();
+  d.playbackState = { shuffle: false, repeat: 'off' };
+
+  await handleCommand({ name: 'repeat' }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setRepeat', 'context']);
+
+  d.playbackState.repeat = 'context';
+  await handleCommand({ name: 'repeat' }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setRepeat', 'track']);
+
+  d.playbackState.repeat = 'track';
+  await handleCommand({ name: 'repeat' }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setRepeat', 'off']);
+});
+
+test('repeat accepts an explicit mode', async () => {
+  const d = deps();
+  d.playbackState = { shuffle: false, repeat: 'off' };
+  await handleCommand({ name: 'repeat', args: ['track'] }, d);
+  assert.deepEqual(d.api.calls.at(-1), ['setRepeat', 'track']);
+});
+
+test('overlay shows, hides and toggles the panel', async () => {
+  const shown = [];
+  const player = {
+    deviceId: 'DEV', lastError: null,
+    waitReady: async () => 'DEV', waitForPlayback: async () => true,
+    restart() {}, stop() {},
+    setOverlay(v) { shown.push(v); },
+    overlayVisible: false,
+  };
+  const d = deps({ player });
+
+  await handleCommand({ name: 'overlay' }, d);
+  assert.deepEqual(shown, [true], 'a hidden overlay is shown');
+
+  player.overlayVisible = true;
+  await handleCommand({ name: 'overlay' }, d);
+  assert.deepEqual(shown, [true, false], 'a visible overlay is hidden');
+
+  await handleCommand({ name: 'overlay', args: ['on'] }, d);
+  assert.deepEqual(shown.at(-1), true, 'an explicit on always shows');
+
+  await handleCommand({ name: 'overlay', args: ['off'] }, d);
+  assert.deepEqual(shown.at(-1), false, 'an explicit off always hides');
+});
+
+test('overlay starts the player when it is not running yet', async () => {
+  const d = deps();
+  d.player.deviceId = null;
+  d.player.setOverlay = () => {};
+  const result = await handleCommand({ name: 'overlay', args: ['on'] }, d);
+  assert.equal(result.ok, true);
 });
 
 test('quit asks the daemon to shut down', async () => {
