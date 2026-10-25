@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+import { parseArgs, USAGE } from '../src/cli/commands.js';
+import { sendCommand } from '../src/cli/client.js';
+import { login } from '../src/spotify/auth.js';
+import { loadConfig } from '../src/config.js';
+import { createInterface } from 'node:readline/promises';
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+async function runLogin() {
+  let creds;
+  try {
+    creds = loadConfig();
+  } catch {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    console.log('Create an app at https://developer.spotify.com/dashboard');
+    console.log('Redirect URI: http://127.0.0.1:8888/callback');
+    console.log('Enable the Web API and the Web Playback SDK.\n');
+    creds = {
+      clientId: (await rl.question('Client ID: ')).trim(),
+      clientSecret: (await rl.question('Client secret: ')).trim(),
+    };
+    rl.close();
+  }
+  await login(creds);
+  console.log('Logged in.');
+}
+
+function formatStatus(status) {
+  if (!status) return 'Nothing playing';
+  const mark = status.playing ? '▶' : '❚❚';
+  return `${mark} ${status.trackName} — ${status.artist}`;
+}
+
+const argv = process.argv.slice(2);
+
+if (argv[0] === '--help' || argv[0] === '-h') {
+  console.log(USAGE);
+  process.exit(0);
+}
+
+let cmd;
+try {
+  cmd = parseArgs(argv);
+} catch (err) {
+  fail(err.message);
+}
+
+if (cmd.name === 'login') {
+  runLogin().catch((err) => fail(err.message));
+} else {
+  const result = await sendCommand(cmd).catch((err) => ({ ok: false, error: err.message }));
+
+  if (!result.ok) fail(result.error);
+
+  if (cmd.name === 'status') console.log(formatStatus(result.data));
+  else if (cmd.name === 'playlists' || cmd.name === 'search') {
+    for (const item of result.data ?? []) {
+      console.log(item.artist ? `${item.name} — ${item.artist}` : item.name);
+    }
+  }
+}
