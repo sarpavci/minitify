@@ -1,0 +1,16 @@
+{
+  "name": "minitify",
+  "version": "0.1.0",
+  "description": "Minimal terminal controller for Spotify",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "minitify": "./bin/minitify"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
