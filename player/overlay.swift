@@ -93,6 +93,9 @@ enum OverlayMetrics {
     static let queueArtworkRadius: CGFloat = 4
     // Four rows: the one playing, then three of what follows.
     static let queueRows = 4
+    // The hover band reaches past the content on both sides, so the row is
+    // wider than the column and pads its contents back into line.
+    static let queueRowPadding: CGFloat = 8
     // Rows arrive after the frame has settled, 40 ms apart.
     static let queueRowDuration: TimeInterval = 0.18
     static let queueFirstDelay: TimeInterval = 0.12
@@ -421,12 +424,13 @@ final class QueueRow: NSView {
         let art = OverlayMetrics.queueArtwork
         let gap: CGFloat = 10
         let timeWidth: CGFloat = 34
-        cover.frame = NSRect(x: 0, y: (bounds.height - art) / 2, width: art, height: art)
-        let textX = art + gap
-        let textWidth = bounds.width - textX - timeWidth - gap
+        let pad = OverlayMetrics.queueRowPadding
+        cover.frame = NSRect(x: pad, y: (bounds.height - art) / 2, width: art, height: art)
+        let textX = pad + art + gap
+        let textWidth = bounds.width - textX - timeWidth - gap - pad
         title.frame = NSRect(x: textX, y: bounds.midY, width: textWidth, height: 16)
         artist.frame = NSRect(x: textX, y: bounds.midY - 15, width: textWidth, height: 13)
-        time.frame = NSRect(x: bounds.width - timeWidth, y: bounds.midY - 6,
+        time.frame = NSRect(x: bounds.width - timeWidth - pad, y: bounds.midY - 6,
                             width: timeWidth, height: 13)
         marker.frame = NSRect(x: cover.frame.maxX - 14, y: cover.frame.minY,
                               width: 14, height: 14)
@@ -728,15 +732,21 @@ final class OverlayController {
         // follows. The first row is the current track and is marked.
         let width = size.width - inset * 2
         let rowHeight = OverlayMetrics.queueRow
+        // Rows start a padding earlier and run a padding longer, so their
+        // contents land on the same column as everything above them.
+        let pad = OverlayMetrics.queueRowPadding
+        let rowX = inset - pad
+        let rowWidth = width + pad * 2
+
         let playingY = OverlayMetrics.queueHeight - rowHeight
-        queueRows[0].frame = NSRect(x: inset, y: playingY, width: width, height: rowHeight)
+        queueRows[0].frame = NSRect(x: rowX, y: playingY, width: rowWidth, height: rowHeight)
 
         let headingY = playingY - OverlayMetrics.queueHeading
         queueHeading.frame = NSRect(x: inset, y: headingY + 9, width: width, height: 14)
 
         for (index, row) in queueRows.enumerated().dropFirst() {
             let y = headingY - CGFloat(index) * rowHeight
-            row.frame = NSRect(x: inset, y: y, width: width, height: rowHeight)
+            row.frame = NSRect(x: rowX, y: y, width: rowWidth, height: rowHeight)
         }
     }
 
