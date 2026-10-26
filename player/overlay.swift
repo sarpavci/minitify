@@ -50,7 +50,7 @@ enum OverlayMode: String {
 enum OverlayMetrics {
     static let miniBody = NSSize(width: 320, height: 60)
     static let normalBody = NSSize(width: 440, height: 188)
-    static let extendedBody = NSSize(width: 440, height: 412)
+    static let extendedBody = NSSize(width: 440, height: 424)
     static let cornerRadius: CGFloat = 16
     static let hairline: CGFloat = 0.5
 
@@ -85,8 +85,10 @@ enum OverlayMetrics {
     static let secondarySymbol: CGFloat = 12
     static let clusterGap: CGFloat = 16
 
-    // The queue: a 32 pt heading over four 48 pt rows, inset like the rest.
-    static let queueHeight: CGFloat = 224
+    // The queue: a 32 pt heading over four 48 pt rows, inset like the rest,
+    // and a tail so the last row does not sit on the panel's edge.
+    static let queueHeight: CGFloat = 236
+    static let queueTail: CGFloat = 12
     static let queueHeading: CGFloat = 32
     static let queueRow: CGFloat = 48
     static let queueArtwork: CGFloat = 32

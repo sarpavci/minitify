@@ -47,7 +47,7 @@ album, reduces its saturation so system greys survive, and layers it at
 |---|---|---|
 | Mini | 320 × 60 | 16 |
 | Normal | 440 × 188 | 16 |
-| Extended | 440 × 412 | 16 |
+| Extended | 440 × 424 | 16 |
 | Library | 800 × 500, min 680 × 360, resizable | 16 |
 
 Material is `NSVisualEffectView` `.hudWindow`, blending `.behindWindow`,
@@ -60,6 +60,20 @@ The panel is a borderless `NSPanel` with `.nonactivatingPanel`,
 it stealing focus.
 
 Insets: mini 10 on all four sides; normal and extended 20.
+
+### The queue
+
+Extended adds 236 pt under the strip, in Spotify's order: the playing
+track as the first row, then the `UP NEXT` heading, then three more.
+
+| | |
+|---|---|
+| Rows | 48 high, cover 32 / radius 4 |
+| Heading | 32 high |
+| Tail | 12, so the last row does not sit on the panel's edge |
+| Row padding | 8 horizontal — the hover band reaches past the contents, which stay on the 20 pt column |
+| Playing row | accent title and a `waveform` badge on its cover; not clickable |
+| Other rows | click plays that track inside the current context |
 
 ## Type
 
