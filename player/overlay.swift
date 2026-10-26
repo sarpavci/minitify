@@ -319,6 +319,7 @@ final class OverlayController {
     private var durationMs: Double = 0
     private var scrubbing = false
     private var hoverMonitor: Any?
+    private var clampWork: DispatchWorkItem?
     private var revealed = false
 
     private let onAction: (String, Double?) -> Void
@@ -330,6 +331,7 @@ final class OverlayController {
         layout(for: .mini, animated: false)
         restorePosition()
         watchPointer()
+        watchMovement()
     }
 
     var isVisible: Bool { panel.isVisible }
@@ -624,10 +626,10 @@ final class OverlayController {
 
         // Close only exists where there is a gutter to hold it.
         closeButton.isHidden = mode == .mini
-        let above = centre.y > screenMidY()
+        let panelIsHigh = centre.y > screenMidY()
         closeButton.setFrameOrigin(NSPoint(
             x: bodyRect.maxX - size,
-            y: above ? bodyRect.minY - gap - size : bodyRect.maxY + gap))
+            y: panelIsHigh ? bodyRect.minY - gap - size : bodyRect.maxY + gap))
     }
 
     private func bodyCentreOnScreen(_ bodyRect: NSRect) -> NSPoint {
@@ -637,6 +639,40 @@ final class OverlayController {
 
     private func screenMidX() -> CGFloat { (panel.screen ?? NSScreen.main)?.visibleFrame.midX ?? 0 }
     private func screenMidY() -> CGFloat { (panel.screen ?? NSScreen.main)?.visibleFrame.midY ?? 0 }
+
+    /// The panel is dragged by its background, which the window server
+    /// handles without this code seeing a thing. Nothing would notice the
+    /// move, so the circles would stay on whichever side they were built
+    /// on and walk off the screen edge with the panel.
+    private func watchMovement() {
+        let centre = NotificationCenter.default
+        centre.addObserver(forName: NSWindow.didMoveNotification,
+                           object: panel, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.placeDetached(for: self.mode)
+            self.scheduleClamp()
+        }
+        centre.addObserver(forName: NSWindow.didChangeScreenNotification,
+                           object: panel, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.placeDetached(for: self.mode)
+            self.scheduleClamp()
+        }
+    }
+
+    /// There is no "finished dragging" notification, so settle a moment
+    /// after the last move rather than fighting the pointer mid-drag.
+    private func scheduleClamp() {
+        clampWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.clampToScreen()
+            self.placeDetached(for: self.mode)
+            self.savePosition()
+        }
+        clampWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+    }
 
     /// One region, not three: the panel, the gutters and the circles are a
     /// single hover target, so crossing the empty gap never hides them.
