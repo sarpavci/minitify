@@ -494,6 +494,9 @@ final class OverlayController {
     private let strip = NSView()
     private let queue = NSView()
     private let queueHeading = DragThroughLabel(labelWithString: "UP NEXT")
+    private let emptyIcon = DragThroughImageView()
+    private let emptyTitle = DragThroughLabel(labelWithString: "")
+    private let emptyDetail = DragThroughLabel(labelWithString: "")
     private var queueRows: [QueueRow] = []
     private var upcoming: [[String: Any]] = []
 
@@ -573,6 +576,16 @@ final class OverlayController {
         queueHeading.font = .systemFont(ofSize: 10, weight: .semibold)
         queueHeading.textColor = .secondaryLabelColor
         queue.addSubview(queueHeading)
+
+        emptyIcon.contentTintColor = .quaternaryLabelColor
+        emptyTitle.font = .systemFont(ofSize: 13, weight: .medium)
+        emptyTitle.textColor = .secondaryLabelColor
+        emptyTitle.alignment = .center
+        emptyDetail.font = .systemFont(ofSize: 11, weight: .regular)
+        emptyDetail.textColor = .tertiaryLabelColor
+        emptyDetail.alignment = .center
+        emptyDetail.maximumNumberOfLines = 1
+        for view in [emptyIcon as NSView, emptyTitle, emptyDetail] { queue.addSubview(view) }
 
         queueRows = (0..<OverlayMetrics.queueRows).map { _ in
             let row = QueueRow()
@@ -986,20 +999,26 @@ final class OverlayController {
     }
 
     private func fillQueue() {
-        // Row zero is whatever is playing; the rest are what follows it.
+        // Two different emptinesses, and they do not mean the same thing:
+        // nothing is playing at all, or something is and nothing follows.
+        let silent = titleLabel.stringValue.isEmpty
+
         let playing = queueRows[0]
-        playing.isHidden = false
-        playing.isPlaying = true
-        playing.show(name: titleLabel.stringValue,
-                     by: artistLabel.stringValue,
-                     lasting: durationMs,
-                     artwork: artworkURL,
-                     uri: nil)
-        playing.needsLayout = true
+        playing.isHidden = silent
+        queueHeading.isHidden = silent
+        if !silent {
+            playing.isPlaying = true
+            playing.show(name: titleLabel.stringValue,
+                         by: artistLabel.stringValue,
+                         lasting: durationMs,
+                         artwork: artworkURL,
+                         uri: nil)
+            playing.needsLayout = true
+        }
 
         for (index, row) in queueRows.enumerated().dropFirst() {
             let position = index - 1
-            guard position < upcoming.count else {
+            guard !silent, position < upcoming.count else {
                 row.isHidden = true
                 continue
             }
@@ -1013,8 +1032,41 @@ final class OverlayController {
                      uri: track["uri"] as? String)
             row.needsLayout = true
         }
-        // Nothing queued is a real answer, not an empty frame.
-        queueHeading.stringValue = upcoming.isEmpty ? "NOTHING QUEUED" : "UP NEXT"
+
+        showEmptyState(silent: silent)
+    }
+
+    /// Fills the space the rows would have taken with something that says
+    /// why they are not there.
+    private func showEmptyState(silent: Bool) {
+        let nothingFollows = upcoming.isEmpty
+        let show = silent || nothingFollows
+        for view in [emptyIcon as NSView, emptyTitle, emptyDetail] { view.isHidden = !show }
+        guard show else { return }
+
+        let symbol = silent ? "music.note" : "text.line.last.and.arrowtriangle.forward"
+        emptyIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 22, weight: .regular))
+        emptyTitle.stringValue = silent ? "Nothing playing" : "Nothing up next"
+        emptyDetail.stringValue = silent
+            ? "Run minitify to pick something"
+            : "The rest of this context will appear here"
+
+        // Centred in whatever is left: the whole queue when silent, the
+        // space under the heading when it is only the queue that is empty.
+        let top = silent
+            ? OverlayMetrics.queueHeight
+            : OverlayMetrics.queueHeight - OverlayMetrics.queueRow - OverlayMetrics.queueHeading
+        let area = NSRect(x: 0, y: OverlayMetrics.queueTail,
+                          width: queue.bounds.width,
+                          height: top - OverlayMetrics.queueTail)
+        let block: CGFloat = 22 + 6 + 17 + 2 + 14
+        var y = area.midY + block / 2 - 22
+        emptyIcon.frame = NSRect(x: area.midX - 11, y: y, width: 22, height: 22)
+        y -= 6 + 17
+        emptyTitle.frame = NSRect(x: area.minX, y: y, width: area.width, height: 17)
+        y -= 2 + 14
+        emptyDetail.frame = NSRect(x: area.minX, y: y, width: area.width, height: 14)
     }
 
     /// The frame has already settled by the time these run, so the rows
