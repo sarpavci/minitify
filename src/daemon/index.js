@@ -13,6 +13,9 @@ import { claimSocket } from './lifecycle.js';
 
 export const DEVICE_NAME = 'minitify';
 
+// How long Spotify's queue takes to catch up with a context change.
+const QUEUE_SETTLE_MS = 1500;
+
 export function socketPath() {
   return configPath('daemon.sock');
 }
@@ -66,18 +69,32 @@ export async function startDaemon() {
     });
   }
 
-  async function refreshQueue(trackKey) {
-    if (trackKey === queueFor) return;
-    queueFor = trackKey;
+  async function fetchQueue() {
+    let next;
     try {
-      queue = await api.queue();
+      next = await api.queue();
     } catch (err) {
       // A panel without its queue is worth more than a daemon that fell
       // over fetching one.
-      queue = [];
+      next = [];
       log(`queue: ${err.message}`);
     }
+    if (JSON.stringify(next) === JSON.stringify(queue)) return;
+    queue = next;
     pushNowPlaying();
+  }
+
+  function refreshQueue(trackKey) {
+    if (trackKey === queueFor) return;
+    queueFor = trackKey;
+    fetchQueue();
+    // Spotify's player endpoint reports the new context before its queue
+    // endpoint does, and the daemon asks the instant the SDK says the
+    // track changed — early enough to be handed the playlist just left.
+    // One more look after it settles, dropped if the track moved on again.
+    setTimeout(() => {
+      if (queueFor === trackKey) fetchQueue();
+    }, QUEUE_SETTLE_MS);
   }
 
   const httpServer = await startHttpServer({

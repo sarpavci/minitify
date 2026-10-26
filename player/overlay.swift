@@ -277,6 +277,10 @@ final class BarView: NSView {
 
     override var isFlipped: Bool { false }
 
+    /// A plain NSView lets a drag through to the window. This one is being
+    /// dragged itself, so the panel must stay where it is.
+    override var mouseDownCanMoveWindow: Bool { false }
+
     override func draw(_ dirty: NSRect) {
         let mid = bounds.midY
         let track = NSRect(x: 0, y: mid - OverlayMetrics.trackThickness / 2,
