@@ -289,6 +289,17 @@ final class BarView: NSView {
     }
 }
 
+/// An NSControl swallows the click that would otherwise drag the window —
+/// isMovableByWindowBackground only acts when the view under the pointer
+/// says it may. Artwork and labels are decoration, so they let it through.
+final class DragThroughImageView: NSImageView {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
+final class DragThroughLabel: NSTextField {
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
 final class OverlayController {
     private var mode: OverlayMode = .mini
     private let panel: OverlayPanel
@@ -297,14 +308,14 @@ final class OverlayController {
     private let body = NSVisualEffectView()
     private let strip = NSView()
 
-    private let artwork = NSImageView()
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let artistLabel = NSTextField(labelWithString: "")
-    private let elapsedLabel = NSTextField(labelWithString: "0:00")
-    private let durationLabel = NSTextField(labelWithString: "0:00")
+    private let artwork = DragThroughImageView()
+    private let titleLabel = DragThroughLabel(labelWithString: "")
+    private let artistLabel = DragThroughLabel(labelWithString: "")
+    private let elapsedLabel = DragThroughLabel(labelWithString: "0:00")
+    private let durationLabel = DragThroughLabel(labelWithString: "0:00")
     private let seek = BarView()
     private let volume = BarView()
-    private let volumeIcon = NSImageView()
+    private let volumeIcon = DragThroughImageView()
 
     private var playPause: SymbolButton!
     private var previousButton: SymbolButton!
@@ -320,6 +331,7 @@ final class OverlayController {
     private var scrubbing = false
     private var hoverMonitor: Any?
     private var clampWork: DispatchWorkItem?
+    private var clamping = false
     private var revealed = false
 
     private let onAction: (String, Double?) -> Void
@@ -646,32 +658,28 @@ final class OverlayController {
     /// on and walk off the screen edge with the panel.
     private func watchMovement() {
         let centre = NotificationCenter.default
-        centre.addObserver(forName: NSWindow.didMoveNotification,
-                           object: panel, queue: .main) { [weak self] _ in
+        let moved: (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
-            self.placeDetached(for: self.mode)
-            self.scheduleClamp()
-        }
-        centre.addObserver(forName: NSWindow.didChangeScreenNotification,
-                           object: panel, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            self.placeDetached(for: self.mode)
-            self.scheduleClamp()
-        }
-    }
-
-    /// There is no "finished dragging" notification, so settle a moment
-    /// after the last move rather than fighting the pointer mid-drag.
-    private func scheduleClamp() {
-        clampWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+            // Clamp as it happens, not afterwards: the panel should stop at
+            // the edge under the pointer rather than be dragged off and
+            // snapped back a moment later.
             self.clampToScreen()
             self.placeDetached(for: self.mode)
-            self.savePosition()
+            self.scheduleSave()
         }
+        centre.addObserver(forName: NSWindow.didMoveNotification,
+                           object: panel, queue: .main, using: moved)
+        centre.addObserver(forName: NSWindow.didChangeScreenNotification,
+                           object: panel, queue: .main, using: moved)
+    }
+
+    /// There is no "finished dragging" notification, so the position is
+    /// written once the moves stop rather than on every frame of a drag.
+    private func scheduleSave() {
+        clampWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.savePosition() }
         clampWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     /// One region, not three: the panel, the gutters and the circles are a
@@ -770,12 +778,19 @@ final class OverlayController {
 
     // MARK: position
 
+    /// The whole window, gutters included — otherwise the circles are the
+    /// first thing off the edge, which is exactly where they are needed.
     private func clampToScreen() {
-        guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
+        guard !clamping, let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
         var frame = panel.frame
         frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
         frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
-        if frame != panel.frame { panel.setFrame(frame, display: true) }
+        guard frame != panel.frame else { return }
+
+        // setFrame posts didMove, which lands us back in here.
+        clamping = true
+        panel.setFrame(frame, display: true)
+        clamping = false
     }
 
     private func savePosition() {
