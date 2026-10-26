@@ -125,8 +125,13 @@ export function createApi({ getToken, fetchImpl = fetch }) {
     },
 
     // A playlist or album plays as a context; loose tracks play as a uri list.
-    playContext(uri, deviceId) {
-      return request('PUT', `/me/player/play${deviceQuery(deviceId)}`, { context_uri: uri });
+    // `offsetUri` starts the context at one of its tracks instead of the
+    // top — the only way to reach a queued track without skipping to it.
+    playContext(uri, deviceId, offsetUri) {
+      return request('PUT', `/me/player/play${deviceQuery(deviceId)}`, {
+        context_uri: uri,
+        ...(offsetUri ? { offset: { uri: offsetUri } } : {}),
+      });
     },
 
     playUris(uris, deviceId) {

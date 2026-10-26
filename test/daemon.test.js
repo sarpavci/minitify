@@ -35,6 +35,8 @@ function deps(extra = {}) {
   return {
     api: fakeApi(),
     player: { deviceId: 'DEV', waitReady: async () => 'DEV', lastError: null, stop() {} },
+    // The daemon always passes one; commands remember the context in it.
+    playbackState: { shuffle: false, repeat: 'off' },
     shutdown: () => {},
     ...extra,
   };
@@ -59,6 +61,30 @@ test('handleCommand routes seek, in milliseconds', async () => {
   const result = await handleCommand({ name: 'seek', args: [61500] }, d);
   assert.equal(result.ok, true);
   assert.deepEqual(d.api.calls.at(-1), ['seek', 61500]);
+});
+
+test('jump plays a track inside the context it belongs to', async () => {
+  // A queue row reached by playing its uri alone would throw the rest of
+  // the playlist away. Spotify keeps the queue when the context is given.
+  const d = deps();
+  await handleCommand({ name: 'play', args: ['spotify:playlist:1'] }, d);
+  await handleCommand({ name: 'jump', args: ['spotify:track:9'] }, d);
+
+  assert.deepEqual(d.api.calls.at(-1), ['playContext', 'spotify:playlist:1', 'DEV', 'spotify:track:9']);
+});
+
+test('jump falls back to the track alone when no context is known', async () => {
+  const d = deps();
+  const result = await handleCommand({ name: 'jump', args: ['spotify:track:9'] }, d);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(d.api.calls.at(-1), ['playUris', ['spotify:track:9'], 'DEV']);
+});
+
+test('jump without a uri is rejected', async () => {
+  const result = await handleCommand({ name: 'jump', args: [] }, deps());
+  assert.equal(result.ok, false);
+  assert.match(result.error, /uri/i);
 });
 
 test('handleCommand returns ok:false for an unknown command', async () => {

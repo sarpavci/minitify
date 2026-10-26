@@ -154,6 +154,21 @@ test('setVolume accepts the boundaries', async () => {
   assert.equal(f.calls.length, 2);
 });
 
+test('playContext can start partway in, which is how a queue row is reached', async () => {
+  const f = stubFetch({ status: 204 });
+  await api(f).playContext('spotify:playlist:1', 'DEV', 'spotify:track:9');
+  assert.deepEqual(f.calls[0].body, {
+    context_uri: 'spotify:playlist:1',
+    offset: { uri: 'spotify:track:9' },
+  });
+});
+
+test('playContext without an offset still starts at the beginning', async () => {
+  const f = stubFetch({ status: 204 });
+  await api(f).playContext('spotify:playlist:1', 'DEV');
+  assert.deepEqual(f.calls[0].body, { context_uri: 'spotify:playlist:1' });
+});
+
 test('queue returns what is coming, shortened to what the panel shows', async () => {
   const track = (name) => ({
     name,

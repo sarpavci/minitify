@@ -52,8 +52,8 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 self?.overlay.hide()
                 emit(["type": "overlay", "show": false])
             } else if let value {
-                // The sliders send a number with theirs: a volume percent
-                // or a seek position in milliseconds.
+                // Controls that carry something: a volume percent, a seek
+                // position in milliseconds, or the uri of a queue row.
                 emit(["type": "mediakey", "command": action, "value": value])
             } else {
                 emit(["type": "mediakey", "command": action])

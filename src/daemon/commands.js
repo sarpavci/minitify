@@ -185,6 +185,11 @@ export async function handleCommand(cmd, deps) {
         const uri = args[0];
         if (!uri) return fail('play needs a Spotify uri');
 
+        // Remembered so a queue row can be reached inside it later.
+        if (deps.playbackState) {
+          deps.playbackState.context = uri.startsWith('spotify:track:') ? null : uri;
+        }
+
         const start = async () => {
           const deviceId = await activateDevice(deps);
           // Tracks play as a uri list; playlists and albums play as a context.
@@ -202,6 +207,21 @@ export async function handleCommand(cmd, deps) {
           await start();
         }
         return ok();
+      }
+
+      case 'jump': {
+        // A row in the queue. Played inside its context so the rest of the
+        // queue survives; on its own only when there is no context to use.
+        const uri = args[0];
+        if (!uri) return fail('jump needs a Spotify uri');
+        const context = deps.playbackState?.context;
+
+        return ok(await retryOnDeadDevice(deps, async () => {
+          const deviceId = await activateDevice(deps);
+          return context
+            ? api.playContext(context, deviceId, uri)
+            : api.playUris([uri], deviceId);
+        }));
       }
 
       case 'pause':

@@ -91,6 +91,7 @@ enum OverlayMetrics {
     static let queueRow: CGFloat = 48
     static let queueArtwork: CGFloat = 32
     static let queueArtworkRadius: CGFloat = 4
+    // Four rows: the one playing, then three of what follows.
     static let queueRows = 4
     // Rows arrive after the frame has settled, 40 ms apart.
     static let queueRowDuration: TimeInterval = 0.18
@@ -344,11 +345,49 @@ final class QueueRow: NSView {
     private let title = DragThroughLabel(labelWithString: "")
     private let artist = DragThroughLabel(labelWithString: "")
     private let time = DragThroughLabel(labelWithString: "")
+    private let marker = DragThroughImageView()
+    private var trackingAreaRef: NSTrackingArea?
+    private var hovering = false
 
-    override var mouseDownCanMoveWindow: Bool { true }
+    /// The track this row stands for, and what to do about a click on it.
+    private(set) var uri: String?
+    var onPlay: ((String) -> Void)?
+    var isPlaying = false { didSet { restyle() } }
+
+    // A click here starts a track, so it must not drag the panel.
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingAreaRef { removeTrackingArea(existing) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true; restyle() }
+    override func mouseExited(with event: NSEvent) { hovering = false; restyle() }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let uri, !isPlaying, bounds.contains(convert(event.locationInWindow, from: nil))
+        else { return }
+        onPlay?(uri)
+    }
+
+    private func restyle() {
+        title.textColor = isPlaying ? .systemGreen : .labelColor
+        marker.isHidden = !isPlaying
+        layer?.backgroundColor = (hovering && !isPlaying)
+            ? NSColor.labelColor.withAlphaComponent(0.06).cgColor
+            : NSColor.clear.cgColor
+    }
 
     init() {
         super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 6
         cover.wantsLayer = true
         cover.layer?.cornerRadius = OverlayMetrics.queueArtworkRadius
         cover.layer?.masksToBounds = true
@@ -367,6 +406,12 @@ final class QueueRow: NSView {
             label.maximumNumberOfLines = 1
             addSubview(label)
         }
+
+        marker.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Playing")?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+        marker.contentTintColor = .systemGreen
+        marker.isHidden = true
+        addSubview(marker)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -383,12 +428,16 @@ final class QueueRow: NSView {
         artist.frame = NSRect(x: textX, y: bounds.midY - 15, width: textWidth, height: 13)
         time.frame = NSRect(x: bounds.width - timeWidth, y: bounds.midY - 6,
                             width: timeWidth, height: 13)
+        marker.frame = NSRect(x: cover.frame.maxX - 14, y: cover.frame.minY,
+                              width: 14, height: 14)
     }
 
     private var coverURL: String?
     private var coverTask: URLSessionDataTask?
 
-    func show(name: String, by who: String, lasting ms: Double, artwork urlString: String?) {
+    func show(name: String, by who: String, lasting ms: Double,
+              artwork urlString: String?, uri trackUri: String?) {
+        uri = trackUri
         title.stringValue = name
         title.toolTip = name
         artist.stringValue = who
@@ -468,9 +517,9 @@ final class OverlayController {
     private var clamping = false
     private var revealed = false
 
-    private let onAction: (String, Double?) -> Void
+    private let onAction: (String, Any?) -> Void
 
-    init(onAction: @escaping (String, Double?) -> Void) {
+    init(onAction: @escaping (String, Any?) -> Void) {
         self.onAction = onAction
         panel = OverlayPanel(size: OverlayMode.mini.windowSize)
         build()
@@ -521,6 +570,7 @@ final class OverlayController {
 
         queueRows = (0..<OverlayMetrics.queueRows).map { _ in
             let row = QueueRow()
+            row.onPlay = { [weak self] uri in self?.onAction("jump", uri) }
             queue.addSubview(row)
             return row
         }
@@ -674,14 +724,19 @@ final class OverlayController {
         let inset = OverlayMetrics.richInset
         queue.frame = NSRect(x: 0, y: 0, width: size.width, height: OverlayMetrics.queueHeight)
 
-        let headingY = OverlayMetrics.queueHeight - OverlayMetrics.queueHeading
-        queueHeading.frame = NSRect(x: inset, y: headingY + 9,
-                                    width: size.width - inset * 2, height: 14)
+        // Spotify's order: what is playing, then the heading, then what
+        // follows. The first row is the current track and is marked.
+        let width = size.width - inset * 2
+        let rowHeight = OverlayMetrics.queueRow
+        let playingY = OverlayMetrics.queueHeight - rowHeight
+        queueRows[0].frame = NSRect(x: inset, y: playingY, width: width, height: rowHeight)
 
-        for (index, row) in queueRows.enumerated() {
-            let y = headingY - CGFloat(index + 1) * OverlayMetrics.queueRow
-            row.frame = NSRect(x: inset, y: y,
-                               width: size.width - inset * 2, height: OverlayMetrics.queueRow)
+        let headingY = playingY - OverlayMetrics.queueHeading
+        queueHeading.frame = NSRect(x: inset, y: headingY + 9, width: width, height: 14)
+
+        for (index, row) in queueRows.enumerated().dropFirst() {
+            let y = headingY - CGFloat(index) * rowHeight
+            row.frame = NSRect(x: inset, y: y, width: width, height: rowHeight)
         }
     }
 
@@ -919,17 +974,31 @@ final class OverlayController {
     }
 
     private func fillQueue() {
-        for (index, row) in queueRows.enumerated() {
-            guard index < upcoming.count else {
+        // Row zero is whatever is playing; the rest are what follows it.
+        let playing = queueRows[0]
+        playing.isHidden = false
+        playing.isPlaying = true
+        playing.show(name: titleLabel.stringValue,
+                     by: artistLabel.stringValue,
+                     lasting: durationMs,
+                     artwork: artworkURL,
+                     uri: nil)
+        playing.needsLayout = true
+
+        for (index, row) in queueRows.enumerated().dropFirst() {
+            let position = index - 1
+            guard position < upcoming.count else {
                 row.isHidden = true
                 continue
             }
-            let track = upcoming[index]
+            let track = upcoming[position]
             row.isHidden = false
+            row.isPlaying = false
             row.show(name: track["name"] as? String ?? "",
                      by: track["artist"] as? String ?? "",
                      lasting: track["durationMs"] as? Double ?? 0,
-                     artwork: track["artworkUrl"] as? String)
+                     artwork: track["artworkUrl"] as? String,
+                     uri: track["uri"] as? String)
             row.needsLayout = true
         }
         // Nothing queued is a real answer, not an empty frame.
