@@ -79,13 +79,17 @@ export async function startDaemon() {
     pagePort: httpServer.port,
     pageSecret: secret,
     onLog: log,
-    onMediaKey: (command) => {
+    // Media keys and the overlay's controls arrive the same way. The
+    // sliders send a number with theirs.
+    onMediaKey: (command, value) => {
       const name =
         command === 'toggle' ? (lastState.paused ? 'resume' : 'pause')
         : command === 'play' ? 'resume'
         : command === 'previous' ? 'prev'
         : command;
-      handleCommand({ name }, { api, player, shutdown, playbackState }).catch((err) => log(`media key: ${err.message}`));
+      const args = value === undefined ? [] : [value];
+      handleCommand({ name, args }, { api, player, shutdown, playbackState })
+        .catch((err) => log(`media key: ${err.message}`));
     },
   });
 
