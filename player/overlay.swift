@@ -732,6 +732,9 @@ final class OverlayController {
         }
         layoutQueue(in: size, visible: mode == .extended)
         modeButton.setSymbol(mode.glyph)
+        // Rows default to visible, so without this a panel that has not
+        // been told anything yet draws a row of nothing.
+        fillQueue()
     }
 
     /// The queue sits under the strip, so the panel grows downward and the
@@ -1054,11 +1057,14 @@ final class OverlayController {
 
         // Centred in whatever is left: the whole queue when silent, the
         // space under the heading when it is only the queue that is empty.
+        // The width is computed, never read off the view — this also runs
+        // from inside a mode change, where a frame reports where it is
+        // coming from rather than where it is going.
         let top = silent
             ? OverlayMetrics.queueHeight
             : OverlayMetrics.queueHeight - OverlayMetrics.queueRow - OverlayMetrics.queueHeading
         let area = NSRect(x: 0, y: OverlayMetrics.queueTail,
-                          width: queue.bounds.width,
+                          width: mode.body.width,
                           height: top - OverlayMetrics.queueTail)
         let block: CGFloat = 22 + 6 + 17 + 2 + 14
         var y = area.midY + block / 2 - 22
