@@ -54,13 +54,36 @@ test('search maps items to name, artist and uri', async () => {
   ]);
 });
 
-test('listPlaylists maps items to name, uri and trackCount', async () => {
+test('listPlaylists maps items to name, uri, trackCount and its smallest cover', async () => {
   const f = stubFetch({
-    body: { items: [{ name: 'Focus', uri: 'spotify:playlist:1', tracks: { total: 42 } }] },
+    body: {
+      items: [
+        {
+          name: 'Focus',
+          uri: 'spotify:playlist:1',
+          tracks: { total: 42 },
+          images: [
+            { url: 'https://cover/640', width: 640 },
+            { url: 'https://cover/64', width: 64 },
+          ],
+        },
+      ],
+    },
   });
   assert.deepEqual(await api(f).listPlaylists(), [
-    { name: 'Focus', uri: 'spotify:playlist:1', trackCount: 42 },
+    {
+      name: 'Focus',
+      uri: 'spotify:playlist:1',
+      trackCount: 42,
+      // The sidebar draws it at 32pt; the big one is a waste of bytes.
+      artworkUrl: 'https://cover/64',
+    },
   ]);
+});
+
+test('listPlaylists tolerates a playlist with no cover', async () => {
+  const f = stubFetch({ body: { items: [{ name: 'Bare', uri: 'spotify:playlist:3' }] } });
+  assert.equal((await api(f).listPlaylists())[0].artworkUrl, null);
 });
 
 test('listPlaylists tolerates a playlist with no track count', async () => {

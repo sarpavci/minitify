@@ -26,6 +26,208 @@ enum LibraryMetrics {
 
     static let sidebarRow: CGFloat = 36
     static let sidebarCover: CGFloat = 32
+    static let sidebarFoot: CGFloat = 44
+
+    static let columnHeader: CGFloat = 24
+    static let nowStrip: CGFloat = 56
+    static let nowCover: CGFloat = 36
+    static let listFoot: CGFloat = 34
+}
+
+/// The mark, drawn rather than loaded: five bars that spell an M. The
+/// geometry is the one frozen in the design lab and recorded in
+/// docs/design.md, in its 64 x 64 box, scaled to whatever it is given.
+final class MarkView: NSView {
+    private static let bars: [(x: CGFloat, height: CGFloat)] = [
+        (6.5, 40), (17.5, 18), (28.5, 24), (39.5, 18), (50.5, 40),
+    ]
+    private static let box: CGFloat = 64
+    private static let barWidth: CGFloat = 7
+    private static let top: CGFloat = 12
+
+    var colour: NSColor = .systemGreen { didSet { needsDisplay = true } }
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    override func draw(_ dirty: NSRect) {
+        let scale = min(bounds.width, bounds.height) / Self.box
+        let inset = (bounds.width - Self.box * scale) / 2
+        colour.setFill()
+        for bar in Self.bars {
+            // The bars hang from the top of the box, so flip y for AppKit.
+            let rect = NSRect(x: inset + bar.x * scale,
+                              y: bounds.height - (Self.top + bar.height) * scale,
+                              width: Self.barWidth * scale,
+                              height: bar.height * scale)
+            let radius = Self.barWidth / 2 * 0.95 * scale
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        }
+    }
+}
+
+/// Where each column of the track grid starts and how wide it is. A row
+/// and the header above it both read it from here, so the two cannot
+/// drift apart when one of them is edited.
+struct TrackColumns {
+    let titleX: CGFloat
+    let titleWidth: CGFloat
+    let artistX: CGFloat
+    let artistWidth: CGFloat
+    let timeX: CGFloat
+    let heartX: CGFloat
+
+    init(width: CGFloat) {
+        let pad = LibraryMetrics.rowPadding
+        let gap = LibraryMetrics.columnGap
+        heartX = width - pad - LibraryMetrics.heart
+        timeX = heartX - gap - LibraryMetrics.duration
+        titleX = pad + LibraryMetrics.rowArtwork + gap
+        // Title takes 1.5 of the space the artist takes 1 of.
+        let available = timeX - gap - titleX
+        titleWidth = available * 0.6 - gap / 2
+        artistX = titleX + titleWidth + gap
+        artistWidth = available - titleWidth - gap
+    }
+}
+
+/// Covers come over the network while the list is being rebuilt under
+/// them, so every load is tied to the url that asked for it and a reply
+/// for a url the view has moved on from is dropped.
+final class ArtworkLoader {
+    private weak var view: NSImageView?
+    private let fallback: String
+    private let point: CGFloat
+    private var url: String?
+    private var task: URLSessionDataTask?
+
+    /// Called with the cover once it lands, and with nil while there is
+    /// none — the window tints itself from it.
+    var onImage: ((NSImage?) -> Void)?
+
+    init(view: NSImageView, fallback: String, point: CGFloat) {
+        self.view = view
+        self.fallback = fallback
+        self.point = point
+    }
+
+    deinit { task?.cancel() }
+
+    func load(_ urlString: String?) {
+        guard let urlString, let link = URL(string: urlString) else {
+            url = nil
+            task?.cancel()
+            placeholder()
+            return
+        }
+        guard urlString != url else { return }
+        url = urlString
+        task?.cancel()
+        placeholder()
+        task = URLSession.shared.dataTask(with: link) { [weak self] data, _, _ in
+            guard let data, let image = NSImage(data: data) else { return }
+            DispatchQueue.main.async {
+                guard let self, self.url == urlString, let view = self.view else { return }
+                view.image = image
+                view.contentTintColor = nil
+                view.layer?.backgroundColor = NSColor.clear.cgColor
+                self.onImage?(image)
+            }
+        }
+        task?.resume()
+    }
+
+    private func placeholder() {
+        guard let view else { return }
+        view.image = NSImage(systemSymbolName: fallback, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: point, weight: .semibold))
+        view.contentTintColor = .quaternaryLabelColor
+        view.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+        onImage?(nil)
+    }
+}
+
+/// The grid's legend, above the first row.
+final class ColumnHeader: NSView {
+    private let title = DragThroughLabel(labelWithString: "Title")
+    private let artist = DragThroughLabel(labelWithString: "Artist")
+    private let time = DragThroughLabel(labelWithString: "Time")
+    private let heart = DragThroughImageView()
+    private let rule = NSView()
+
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        for label in [title, artist, time] {
+            label.font = .systemFont(ofSize: 9, weight: .semibold)
+            label.textColor = .tertiaryLabelColor
+            addSubview(label)
+        }
+        time.alignment = .right
+        heart.image = NSImage(systemSymbolName: "heart", accessibilityDescription: "Saved")?
+            .withSymbolConfiguration(.init(pointSize: 9, weight: .semibold))
+        heart.contentTintColor = .tertiaryLabelColor
+        addSubview(heart)
+
+        rule.wantsLayer = true
+        rule.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.1).cgColor
+        addSubview(rule)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        let columns = TrackColumns(width: bounds.width)
+        let y = bounds.height - 15
+        title.frame = NSRect(x: columns.titleX, y: y, width: columns.titleWidth, height: 11)
+        artist.frame = NSRect(x: columns.artistX, y: y, width: columns.artistWidth, height: 11)
+        time.frame = NSRect(x: columns.timeX, y: y, width: LibraryMetrics.duration, height: 11)
+        heart.frame = NSRect(x: columns.heartX, y: y - 1, width: LibraryMetrics.heart, height: 12)
+        rule.frame = NSRect(x: LibraryMetrics.rowPadding, y: 0,
+                            width: max(bounds.width - LibraryMetrics.rowPadding * 2, 0), height: 1)
+    }
+}
+
+/// Four bars that move while something is playing — the mark's EQ beat at
+/// strip size. Still bars when paused, so the strip reads the same either
+/// way without the motion claiming something is happening.
+final class EqualiserView: NSView {
+    private var phase: CGFloat = 0
+    private var timer: Timer?
+
+    var isAnimating = false {
+        didSet {
+            guard isAnimating != oldValue else { return }
+            timer?.invalidate()
+            timer = nil
+            if isAnimating {
+                timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 12, repeats: true) { [weak self] _ in
+                    self?.phase += 0.5
+                    self?.needsDisplay = true
+                }
+            }
+            needsDisplay = true
+        }
+    }
+
+    override var mouseDownCanMoveWindow: Bool { true }
+    deinit { timer?.invalidate() }
+
+    override func draw(_ dirty: NSRect) {
+        let count = 4
+        let width: CGFloat = 3
+        let gap: CGFloat = 3
+        var x = bounds.width - CGFloat(count) * width - CGFloat(count - 1) * gap
+        NSColor.systemGreen.withAlphaComponent(isAnimating ? 0.9 : 0.35).setFill()
+        for bar in 0..<count {
+            let swing = isAnimating ? (sin(phase + CGFloat(bar) * 1.1) + 1) / 2 : 0.3
+            let height = bounds.height * (0.25 + 0.75 * swing)
+            let rect = NSRect(x: x, y: (bounds.height - height) / 2, width: width, height: height)
+            NSBezierPath(roundedRect: rect, xRadius: width / 2, yRadius: width / 2).fill()
+            x += width + gap
+        }
+    }
 }
 
 /// A scroll view's document starts at the bottom unless it is flipped, so
@@ -46,8 +248,7 @@ final class TrackRow: NSView {
 
     private var trackingAreaRef: NSTrackingArea?
     private var hovering = false
-    private var coverURL: String?
-    private var coverTask: URLSessionDataTask?
+    private lazy var art = ArtworkLoader(view: cover, fallback: "music.note", point: 11)
 
     private(set) var uri: String?
     var onPlay: ((String) -> Void)?
@@ -63,7 +264,7 @@ final class TrackRow: NSView {
         cover.wantsLayer = true
         cover.layer?.cornerRadius = 5
         cover.layer?.masksToBounds = true
-        cover.imageScaling = .scaleProportionallyUpOrDown
+        cover.imageScaling = .scaleProportionallyDown
         addSubview(cover)
 
         title.font = .systemFont(ofSize: 12, weight: .medium)
@@ -107,24 +308,20 @@ final class TrackRow: NSView {
 
     override func layout() {
         super.layout()
-        let pad = LibraryMetrics.rowPadding
-        let art = LibraryMetrics.rowArtwork
-        let gap = LibraryMetrics.columnGap
-        cover.frame = NSRect(x: pad, y: (bounds.height - art) / 2, width: art, height: art)
+        let size = LibraryMetrics.rowArtwork
+        let columns = TrackColumns(width: bounds.width)
+        cover.frame = NSRect(x: LibraryMetrics.rowPadding, y: (bounds.height - size) / 2,
+                             width: size, height: size)
         marker.frame = NSRect(x: cover.frame.maxX - 14, y: cover.frame.minY, width: 14, height: 14)
 
-        let heartX = bounds.width - pad - LibraryMetrics.heart
-        heart.frame = NSRect(x: heartX, y: (bounds.height - 20) / 2, width: LibraryMetrics.heart, height: 20)
-        let timeX = heartX - gap - LibraryMetrics.duration
-        time.frame = NSRect(x: timeX, y: (bounds.height - 14) / 2, width: LibraryMetrics.duration, height: 14)
-
-        // Title takes 1.5 of the space the artist takes 1 of.
-        let textX = pad + art + gap
-        let available = timeX - gap - textX
-        let titleWidth = available * 0.6 - gap / 2
-        title.frame = NSRect(x: textX, y: (bounds.height - 16) / 2, width: titleWidth, height: 16)
-        artist.frame = NSRect(x: textX + titleWidth + gap, y: (bounds.height - 15) / 2,
-                              width: available - titleWidth - gap, height: 15)
+        heart.frame = NSRect(x: columns.heartX, y: (bounds.height - 20) / 2,
+                             width: LibraryMetrics.heart, height: 20)
+        time.frame = NSRect(x: columns.timeX, y: (bounds.height - 14) / 2,
+                            width: LibraryMetrics.duration, height: 14)
+        title.frame = NSRect(x: columns.titleX, y: (bounds.height - 16) / 2,
+                             width: columns.titleWidth, height: 16)
+        artist.frame = NSRect(x: columns.artistX, y: (bounds.height - 15) / 2,
+                              width: columns.artistWidth, height: 15)
     }
 
     private func restyle() {
@@ -159,37 +356,8 @@ final class TrackRow: NSView {
         heart.contentTintColor = saved ? .systemGreen : .tertiaryLabelColor
         heart.toolTip = saved ? "In your Liked Songs" : nil
 
-        loadCover(track["artworkUrl"] as? String)
+        art.load(track["artworkUrl"] as? String)
         needsLayout = true
-    }
-
-    private func loadCover(_ urlString: String?) {
-        let placeholder = {
-            self.cover.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-            self.cover.contentTintColor = .quaternaryLabelColor
-            self.cover.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
-        }
-        guard let urlString, let url = URL(string: urlString) else {
-            coverURL = nil
-            coverTask?.cancel()
-            placeholder()
-            return
-        }
-        guard urlString != coverURL else { return }
-        coverURL = urlString
-        coverTask?.cancel()
-        placeholder()
-        coverTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data, let image = NSImage(data: data) else { return }
-            DispatchQueue.main.async {
-                guard let self, self.coverURL == urlString else { return }
-                self.cover.image = image
-                self.cover.contentTintColor = nil
-                self.cover.layer?.backgroundColor = NSColor.clear.cgColor
-            }
-        }
-        coverTask?.resume()
     }
 }
 
@@ -200,6 +368,7 @@ final class SidebarRow: NSView {
     private let count = DragThroughLabel(labelWithString: "")
     private var trackingAreaRef: NSTrackingArea?
     private var hovering = false
+    private lazy var art = ArtworkLoader(view: cover, fallback: "music.note.list", point: 12)
 
     let uri: String?
     var onPick: ((String?) -> Void)?
@@ -207,7 +376,7 @@ final class SidebarRow: NSView {
 
     override var mouseDownCanMoveWindow: Bool { false }
 
-    init(uri: String?, title: String, detail: String, liked: Bool) {
+    init(uri: String?, title: String, detail: String, artworkUrl: String?, liked: Bool) {
         self.uri = uri
         super.init(frame: .zero)
         wantsLayer = true
@@ -216,13 +385,17 @@ final class SidebarRow: NSView {
         cover.wantsLayer = true
         cover.layer?.cornerRadius = 5
         cover.layer?.masksToBounds = true
-        cover.imageScaling = .scaleProportionallyUpOrDown
-        cover.image = NSImage(systemSymbolName: liked ? "heart.fill" : "music.note.list",
-                              accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
-        cover.contentTintColor = liked ? .systemGreen : .secondaryLabelColor
-        cover.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+        cover.imageScaling = .scaleProportionallyDown
         addSubview(cover)
+        if liked {
+            // Liked Songs has no cover of its own; it gets the heart.
+            cover.image = NSImage(systemSymbolName: "heart.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+            cover.contentTintColor = .systemGreen
+            cover.layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.14).cgColor
+        } else {
+            art.load(artworkUrl)
+        }
 
         name.stringValue = title
         name.toolTip = title
@@ -303,12 +476,27 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
     private let sidebar = NSView()
     private let sidebarScroll = NSScrollView()
     private let sidebarStack = FlippedView()
-    private let divider = NSView()
+    private let playlistHeading = DragThroughLabel(labelWithString: "YOUR PLAYLISTS")
+    private let footTitle = DragThroughLabel(labelWithString: "Your music.")
+    private let footLine = DragThroughLabel(labelWithString: "Always a little closer.")
     private let pane = NSView()
+    private let columns = ColumnHeader()
     private let scroll = NSScrollView()
     private let list = FlippedView()
+    private let listFoot = DragThroughLabel(labelWithString: "")
 
-    private let brandMark = DragThroughImageView()
+    /// A wash of the current cover's colour, under everything. It is a
+    /// layer rather than a view so it cannot take a click.
+    private let wash = CALayer()
+
+    private let nowStrip = NSView()
+    private let nowCover = DragThroughImageView()
+    private let nowKicker = DragThroughLabel(labelWithString: "")
+    private let nowText = DragThroughLabel(labelWithString: "")
+    private let equaliser = EqualiserView()
+    private lazy var nowArt = ArtworkLoader(view: nowCover, fallback: "music.note", point: 13)
+
+    private let brandMark = MarkView()
     private let brandText = DragThroughLabel(labelWithString: "")
     private let search = NSSearchField()
 
@@ -350,12 +538,28 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         if selected == nil { pick(nil) }
     }
 
-    func hide() { window.orderOut(nil) }
+    func hide() {
+        // Nothing is on screen to animate for.
+        equaliser.isAnimating = false
+        window.orderOut(nil)
+    }
 
-    func nowPlaying(_ uri: String?) {
-        guard playingURI != uri else { return }
-        playingURI = uri
-        for row in rows { row.isPlaying = row.uri != nil && row.uri == uri }
+    func nowPlaying(_ message: [String: Any]?) {
+        let uri = message?["uri"] as? String
+        if playingURI != uri {
+            playingURI = uri
+            for row in rows { row.isPlaying = row.uri != nil && row.uri == uri }
+        }
+
+        let title = message?["title"] as? String ?? ""
+        let artist = message?["artist"] as? String ?? ""
+        let playing = message?["playing"] as? Bool ?? false
+        nowKicker.stringValue = title.isEmpty ? "NOTHING PLAYING" : (playing ? "NOW PLAYING" : "PAUSED")
+        nowText.stringValue = title.isEmpty
+            ? "Pick a track to start."
+            : (artist.isEmpty ? title : "\(title) · \(artist)")
+        nowArt.load(message?["artworkUrl"] as? String)
+        equaliser.isAnimating = playing && window.isVisible
     }
 
     // MARK: building
@@ -364,11 +568,12 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         material.material = .hudWindow
         material.blendingMode = .behindWindow
         material.state = .active
+        material.wantsLayer = true
         window.contentView = material
+        wash.backgroundColor = NSColor.clear.cgColor
+        material.layer?.insertSublayer(wash, at: 0)
 
-        brandMark.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 16, weight: .semibold))
-        brandMark.contentTintColor = .systemGreen
+        brandMark.setAccessibilityLabel("minitify")
         material.addSubview(brandMark)
 
         brandText.attributedStringValue = brandLockup()
@@ -390,16 +595,27 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         sidebarScroll.documentView = sidebarStack
         sidebar.addSubview(sidebarScroll)
 
-        divider.wantsLayer = true
-        divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.12).cgColor
-        sidebarStack.addSubview(divider)
+        playlistHeading.font = .systemFont(ofSize: 9, weight: .semibold)
+        playlistHeading.textColor = .tertiaryLabelColor
+        sidebarStack.addSubview(playlistHeading)
+
+        // The sign-off sits below the scroll, so it never scrolls away.
+        footTitle.font = .systemFont(ofSize: 11, weight: .medium)
+        footTitle.textColor = .secondaryLabelColor
+        footLine.font = .systemFont(ofSize: 11, weight: .regular)
+        footLine.textColor = .tertiaryLabelColor
+        for label in [footTitle, footLine] {
+            label.lineBreakMode = .byTruncatingTail
+            sidebar.addSubview(label)
+        }
 
         material.addSubview(pane)
+        pane.addSubview(columns)
 
         collectionArt.wantsLayer = true
         collectionArt.layer?.cornerRadius = 8
         collectionArt.layer?.masksToBounds = true
-        collectionArt.imageScaling = .scaleProportionallyUpOrDown
+        collectionArt.imageScaling = .scaleProportionallyDown
         pane.addSubview(collectionArt)
 
         collectionKicker.font = .systemFont(ofSize: 9, weight: .semibold)
@@ -419,6 +635,33 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         scroll.documentView = list
         pane.addSubview(scroll)
 
+        listFoot.font = .systemFont(ofSize: 10, weight: .regular)
+        listFoot.textColor = .tertiaryLabelColor
+        listFoot.alignment = .center
+        list.addSubview(listFoot)
+
+        nowStrip.wantsLayer = true
+        nowStrip.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.04).cgColor
+        pane.addSubview(nowStrip)
+
+        nowCover.wantsLayer = true
+        nowCover.layer?.cornerRadius = 6
+        nowCover.layer?.masksToBounds = true
+        nowCover.imageScaling = .scaleProportionallyDown
+        nowStrip.addSubview(nowCover)
+
+        nowKicker.font = .systemFont(ofSize: 9, weight: .semibold)
+        nowKicker.textColor = .systemGreen
+        nowText.font = .systemFont(ofSize: 12, weight: .medium)
+        nowText.lineBreakMode = .byTruncatingTail
+        for label in [nowKicker, nowText] {
+            label.maximumNumberOfLines = 1
+            nowStrip.addSubview(label)
+        }
+        nowStrip.addSubview(equaliser)
+        nowArt.onImage = { [weak self] image in self?.tint(from: image) }
+        nowPlaying(nil)
+
         emptyTitle.font = .systemFont(ofSize: 13, weight: .medium)
         emptyTitle.textColor = .secondaryLabelColor
         emptyTitle.alignment = .center
@@ -433,6 +676,34 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         ) { [weak self] _ in self?.layoutAll() }
 
         layoutAll()
+    }
+
+    /// One colour, read from the cover at a single pixel. The average of a
+    /// cover is muddy, so only its hue survives: the saturation and
+    /// brightness are set here, which keeps every wash the same weight
+    /// whatever is playing.
+    private func tint(from image: NSImage?) {
+        var colour = NSColor.clear
+        if let image,
+           let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            var pixel = [UInt8](repeating: 0, count: 4)
+            let space = CGColorSpaceCreateDeviceRGB()
+            if let context = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
+                                       bytesPerRow: 4, space: space,
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                context.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+                let average = NSColor(red: CGFloat(pixel[0]) / 255, green: CGFloat(pixel[1]) / 255,
+                                      blue: CGFloat(pixel[2]) / 255, alpha: 1)
+                if let rgb = average.usingColorSpace(.deviceRGB) {
+                    colour = NSColor(hue: rgb.hueComponent, saturation: 0.6,
+                                     brightness: 0.5, alpha: 0.14)
+                }
+            }
+        }
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.45)
+        wash.backgroundColor = colour.cgColor
+        CATransaction.commit()
     }
 
     /// "mini" in the label colour, "tify" in the accent — the wordmark.
@@ -450,6 +721,12 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
     private func layoutAll() {
         let size = material.bounds.size
         guard size.width > 0 else { return }
+        // Laying out is not an animation; the wash should follow the
+        // window edge instantly.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wash.frame = material.bounds
+        CATransaction.commit()
         let inset = LibraryMetrics.inset
         let header = LibraryMetrics.header
 
@@ -465,7 +742,11 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
                               height: LibraryMetrics.searchHeight)
 
         sidebar.frame = NSRect(x: 0, y: 0, width: LibraryMetrics.sidebar, height: headerY)
-        sidebarScroll.frame = sidebar.bounds.insetBy(dx: 8, dy: 8)
+        let foot = LibraryMetrics.sidebarFoot
+        sidebarScroll.frame = NSRect(x: 8, y: foot, width: LibraryMetrics.sidebar - 16,
+                                     height: max(headerY - foot - 8, 0))
+        footTitle.frame = NSRect(x: 16, y: foot - 24, width: LibraryMetrics.sidebar - 32, height: 14)
+        footLine.frame = NSRect(x: 16, y: foot - 40, width: LibraryMetrics.sidebar - 32, height: 14)
         layoutSidebar()
 
         pane.frame = NSRect(x: LibraryMetrics.sidebar, y: 0,
@@ -490,12 +771,30 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         collectionFacts.frame = NSRect(x: textX, y: collectionArt.frame.minY + 2,
                                        width: textWidth, height: 14)
 
-        scroll.frame = NSRect(x: inset - LibraryMetrics.rowPadding, y: 0,
-                              width: width - (inset - LibraryMetrics.rowPadding) - inset,
-                              height: headerTop)
+        // The list is inset by the window's margin less a row's own
+        // padding, so a row's text lines up with the header above it while
+        // its hover fill still has room to breathe at both edges.
+        let strip = LibraryMetrics.nowStrip
+        let listX = inset - LibraryMetrics.rowPadding
+        let listWidth = width - listX - inset
+        let legend = LibraryMetrics.columnHeader
+
+        columns.frame = NSRect(x: listX, y: headerTop - legend, width: listWidth, height: legend)
+        columns.needsLayout = true
+        scroll.frame = NSRect(x: listX, y: strip, width: listWidth,
+                              height: max(headerTop - legend - strip, 0))
         layoutRows()
 
-        let centre = NSRect(x: 0, y: 0, width: width, height: headerTop)
+        nowStrip.frame = NSRect(x: 0, y: 0, width: width, height: strip)
+        let cover = LibraryMetrics.nowCover
+        nowCover.frame = NSRect(x: inset, y: (strip - cover) / 2, width: cover, height: cover)
+        let nowX = nowCover.frame.maxX + 12
+        let nowWidth = max(width - nowX - inset - 40, 0)
+        nowKicker.frame = NSRect(x: nowX, y: strip / 2 + 2, width: nowWidth, height: 12)
+        nowText.frame = NSRect(x: nowX, y: strip / 2 - 17, width: nowWidth, height: 16)
+        equaliser.frame = NSRect(x: width - inset - 24, y: (strip - 16) / 2, width: 24, height: 16)
+
+        let centre = NSRect(x: 0, y: strip, width: width, height: max(headerTop - strip, 0))
         emptyTitle.frame = NSRect(x: 0, y: centre.midY, width: width, height: 17)
         emptyDetail.frame = NSRect(x: inset, y: centre.midY - 34,
                                    width: width - inset * 2, height: 30)
@@ -504,27 +803,35 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
     private func layoutSidebar() {
         let width = sidebarScroll.bounds.width
         let step = LibraryMetrics.sidebarRow + 4
-        let height = max(CGFloat(sidebarRows.count) * step, sidebarScroll.bounds.height)
-        sidebarStack.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        // Liked Songs is pinned at the top; the heading separates it from
+        // the playlists underneath.
+        let headingSpace: CGFloat = 26
+        let rest = max(sidebarRows.count - 1, 0)
+        let content = step + headingSpace + CGFloat(rest) * step
+        sidebarStack.frame = NSRect(x: 0, y: 0, width: width,
+                                    height: max(content, sidebarScroll.bounds.height))
         for (index, row) in sidebarRows.enumerated() {
-            row.frame = NSRect(x: 0, y: CGFloat(index) * step,
-                               width: width, height: LibraryMetrics.sidebarRow)
+            let y = index == 0 ? 0 : step + headingSpace + CGFloat(index - 1) * step
+            row.frame = NSRect(x: 0, y: y, width: width, height: LibraryMetrics.sidebarRow)
             row.needsLayout = true
         }
-        // Liked Songs is pinned; the divider sits under it.
-        divider.frame = NSRect(x: 8, y: step - 3, width: max(width - 16, 0), height: 1)
+        playlistHeading.frame = NSRect(x: 8, y: step + 8, width: max(width - 16, 0), height: 12)
+        playlistHeading.isHidden = rest == 0
     }
 
     private func layoutRows() {
         let width = scroll.bounds.width
         let step = LibraryMetrics.row + LibraryMetrics.rowGap
-        let height = max(CGFloat(rows.count) * step, scroll.bounds.height)
-        list.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let end = CGFloat(rows.count) * step
+        let content = end + LibraryMetrics.listFoot
+        list.frame = NSRect(x: 0, y: 0, width: width, height: max(content, scroll.bounds.height))
         for (index, row) in rows.enumerated() {
             row.frame = NSRect(x: 0, y: CGFloat(index) * step,
                                width: width, height: LibraryMetrics.row)
             row.needsLayout = true
         }
+        listFoot.frame = NSRect(x: LibraryMetrics.rowPadding, y: end + 10,
+                                width: max(width - LibraryMetrics.rowPadding * 2, 0), height: 14)
     }
 
     // MARK: data
@@ -537,7 +844,8 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
             self.sidebarRows = []
 
             // Liked Songs is pinned above everything else.
-            let liked = SidebarRow(uri: nil, title: "Liked Songs", detail: "saved tracks", liked: true)
+            let liked = SidebarRow(uri: nil, title: "Liked Songs", detail: "saved tracks",
+                                   artworkUrl: nil, liked: true)
             liked.onPick = { [weak self] uri in self?.pick(uri) }
             self.sidebarRows.append(liked)
 
@@ -546,12 +854,13 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
                 let row = SidebarRow(uri: playlist["uri"] as? String,
                                      title: playlist["name"] as? String ?? "",
                                      detail: "\(count) tracks",
+                                     artworkUrl: playlist["artworkUrl"] as? String,
                                      liked: false)
                 row.onPick = { [weak self] uri in self?.pick(uri) }
                 self.sidebarRows.append(row)
             }
             self.sidebarRows.forEach { self.sidebarStack.addSubview($0) }
-            self.sidebarStack.addSubview(self.divider)
+            self.sidebarStack.addSubview(self.playlistHeading)
             self.markSelection()
             self.layoutSidebar()
         }
@@ -621,6 +930,13 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         } else {
             showMessage(title: nil, detail: nil)
         }
+
+        let shown = filtered.count == tracks.count
+            ? "All \(filtered.count) tracks shown"
+            : "\(filtered.count) of \(tracks.count) tracks shown"
+        listFoot.stringValue = selected == nil
+            ? "\(shown) · Hearts keep this collection yours."
+            : "\(shown) · Playing one starts the whole playlist."
     }
 
     private func showMessage(title: String?, detail: String?) {
@@ -628,6 +944,7 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         emptyTitle.isHidden = !show
         emptyDetail.isHidden = !show
         scroll.isHidden = show
+        columns.isHidden = show
         emptyTitle.stringValue = title ?? ""
         emptyDetail.stringValue = detail ?? ""
     }
@@ -638,7 +955,7 @@ final class LibraryController: NSObject, NSSearchFieldDelegate {
         collectionTitle.stringValue = selectedName
         collectionArt.image = NSImage(systemSymbolName: liked ? "heart.fill" : "music.note.list",
                                       accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 30, weight: .semibold))
+            .withSymbolConfiguration(.init(pointSize: 34, weight: .semibold))
         collectionArt.contentTintColor = liked ? .systemGreen : .secondaryLabelColor
         collectionArt.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
 

@@ -115,6 +115,7 @@ export function createApi({ getToken, fetchImpl = fetch }) {
             uri: p.uri,
             // The February 2026 API moved this count from `tracks` to `items`.
             trackCount: p.tracks?.total ?? p.items?.total ?? 0,
+            artworkUrl: smallestCover(p.images),
           });
         }
         path = data?.next ? data.next.replace(BASE, '') : null;

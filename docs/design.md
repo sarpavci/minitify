@@ -150,9 +150,11 @@ mini → normal → extended → mini.
 
 ## Library
 
-Sidebar 200 wide. Liked Songs is pinned above a divider with a
-`.systemGreen` heart on its own material tile; playlists follow, each
-with a 32 pt cover.
+Sidebar 200 wide. Liked Songs is pinned at the top with a
+`.systemGreen` heart on its own material tile; a `YOUR PLAYLISTS`
+heading at 9/600 follows, then the playlists, each with its own 32 pt
+cover. Below the scroll, never scrolling away: `Your music.` over
+`Always a little closer.`
 
 The header is 64 high: the brand lockup (22 pt mark + wordmark, 8 gap)
 on the left, search field 32 high on the right.
@@ -164,7 +166,8 @@ title, then count and total duration at 11.
 
 **Column template** 28 · 1.5fr · 1fr · 40 · 28, gaps 12 — artwork,
 title, artist, duration, heart. The play target covers artwork and
-title together.
+title together. A 24 pt legend above the first row names the columns at
+9/600 over a hairline, on the same template, so the two cannot drift.
 
 **Rows** are separate items, not a table: 40 high, corner 8, 8 pt
 horizontal padding, 6 pt apart, each on the row surface with a 0.5 pt
@@ -173,10 +176,19 @@ inset hairline. No dividers. Selected rows take the hover colour and a
 carries a 14 pt equaliser badge on its artwork.
 
 **Hearts** are always visible — 60% secondary label when off, 100%
-`.systemGreen` when on. Each toggles independently without playing the
-row.
+`.systemGreen` when on. They are read-only: Spotify refuses a
+Development Mode app both the saved state of a track and the right to
+change it, so every row in Liked Songs is filled by definition and
+nothing else is.
 
-Below the list: a one-line summary, then a 56 pt now-playing strip.
+Below the last row, inside the scroll: a one-line summary at 10 —
+`All N tracks shown · Hearts keep this collection yours.` for Liked
+Songs, `· Playing one starts the whole playlist.` for a playlist.
+
+Pinned under the pane, outside the scroll: a 56 pt now-playing strip —
+36 pt cover, `NOW PLAYING` / `PAUSED` / `NOTHING PLAYING` at 9/600 in
+the accent, title · artist at 12, and a four-bar equaliser at the right
+edge that moves only while something plays.
 
 ## The mark
 

@@ -150,7 +150,7 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                     case "nowplaying":
                         self.updateNowPlaying(message)
                         self.overlay.apply(message)
-                        self.library.nowPlaying(message["uri"] as? String)
+                        self.library.nowPlaying(message)
                     case "overlay":
                         if message["show"] as? Bool == true { self.overlay.show() }
                         else { self.overlay.hide() }
