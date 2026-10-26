@@ -48,6 +48,38 @@ export async function startDaemon() {
   const playbackState = { shuffle: false, repeat: 'off' };
   let player;
 
+  // The queue the extended panel shows, and the track it was fetched for.
+  let queue = [];
+  let queueFor = null;
+
+  function pushNowPlaying() {
+    player.sendNowPlaying({
+      title: lastState.title,
+      artist: lastState.artist,
+      durationMs: lastState.durationMs,
+      positionMs: lastState.positionMs,
+      playing: !lastState.paused,
+      artworkUrl: lastState.artworkUrl ?? null,
+      shuffle: playbackState.shuffle,
+      repeat: playbackState.repeat,
+      queue,
+    });
+  }
+
+  async function refreshQueue(trackKey) {
+    if (trackKey === queueFor) return;
+    queueFor = trackKey;
+    try {
+      queue = await api.queue();
+    } catch (err) {
+      // A panel without its queue is worth more than a daemon that fell
+      // over fetching one.
+      queue = [];
+      log(`queue: ${err.message}`);
+    }
+    pushNowPlaying();
+  }
+
   const httpServer = await startHttpServer({
     token: await getAccessToken(creds),
     getToken: () => getAccessToken(creds),
@@ -61,16 +93,11 @@ export async function startDaemon() {
         lastState = data;
         playbackState.shuffle = Boolean(data.shuffle);
         playbackState.repeat = data.repeat ?? 'off';
-        player.sendNowPlaying({
-          title: data.title,
-          artist: data.artist,
-          durationMs: data.durationMs,
-          positionMs: data.positionMs,
-          playing: !data.paused,
-          artworkUrl: data.artworkUrl ?? null,
-          shuffle: playbackState.shuffle,
-          repeat: playbackState.repeat,
-        });
+        pushNowPlaying();
+        // What is coming only changes when the track does. State events
+        // arrive on every pause, seek and progress tick, and asking
+        // Spotify each time would be a request a second for four rows.
+        refreshQueue(`${data.title}\u0000${data.artist}`);
       }
     },
   });

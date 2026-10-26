@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createApi, SEARCH_LIMIT } from '../src/spotify/api.js';
+import { createApi, SEARCH_LIMIT, QUEUE_LIMIT } from '../src/spotify/api.js';
 
 // Builds a fetch stand-in that records calls and replays queued responses.
 function stubFetch(...responses) {
@@ -152,6 +152,47 @@ test('setVolume accepts the boundaries', async () => {
   await api(f).setVolume(0);
   await api(f).setVolume(100);
   assert.equal(f.calls.length, 2);
+});
+
+test('queue returns what is coming, shortened to what the panel shows', async () => {
+  const track = (name) => ({
+    name,
+    artists: [{ name: 'Daft Punk' }],
+    duration_ms: 228_000,
+    uri: `spotify:track:${name}`,
+    album: {
+      images: [
+        { url: 'https://i.example/large.jpg', width: 640 },
+        { url: 'https://i.example/small.jpg', width: 64 },
+      ],
+    },
+  });
+  const f = stubFetch({
+    body: {
+      currently_playing: track('now'),
+      queue: ['a', 'b', 'c', 'd', 'e', 'f'].map(track),
+    },
+  });
+
+  const upcoming = await api(f).queue();
+
+  assert.match(f.calls[0].url, /\/me\/player\/queue$/);
+  assert.equal(upcoming.length, QUEUE_LIMIT, 'the panel only has room for four');
+  assert.deepEqual(upcoming[0], {
+    name: 'a',
+    artist: 'Daft Punk',
+    durationMs: 228_000,
+    uri: 'spotify:track:a',
+    // A 32 pt row wants the smallest cover offered, not the 640 one.
+    artworkUrl: 'https://i.example/small.jpg',
+  });
+});
+
+test('queue survives an empty or absent list', async () => {
+  assert.deepEqual(await api(stubFetch({ body: {} })).queue(), []);
+  assert.deepEqual(await api(stubFetch({ body: { queue: null } })).queue(), []);
+  // Nothing playing answers 204 with no body at all.
+  assert.deepEqual(await api(stubFetch({ status: 204 })).queue(), []);
 });
 
 test('seek asks for a whole number of milliseconds', async () => {

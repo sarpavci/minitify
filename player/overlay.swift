@@ -5,9 +5,30 @@ import Cocoa
 enum OverlayMode: String {
     case mini
     case normal
+    case extended
 
-    var next: OverlayMode { self == .mini ? .normal : .mini }
-    var body: NSSize { self == .mini ? OverlayMetrics.miniBody : OverlayMetrics.normalBody }
+    var next: OverlayMode {
+        switch self {
+        case .mini: return .normal
+        case .normal: return .extended
+        case .extended: return .mini
+        }
+    }
+
+    var body: NSSize {
+        switch self {
+        case .mini: return OverlayMetrics.miniBody
+        case .normal: return OverlayMetrics.normalBody
+        case .extended: return OverlayMetrics.extendedBody
+        }
+    }
+
+    /// Mini and normal offer to grow; extended offers to fold away.
+    var glyph: String {
+        self == .extended
+            ? "arrow.down.right.and.arrow.up.left"
+            : "arrow.up.left.and.arrow.down.right"
+    }
 
     /// The rich modes keep a gutter on every side; mini only needs the two
     /// the mode button can live in.
@@ -29,6 +50,7 @@ enum OverlayMode: String {
 enum OverlayMetrics {
     static let miniBody = NSSize(width: 320, height: 60)
     static let normalBody = NSSize(width: 440, height: 188)
+    static let extendedBody = NSSize(width: 440, height: 412)
     static let cornerRadius: CGFloat = 16
     static let hairline: CGFloat = 0.5
 
@@ -62,6 +84,18 @@ enum OverlayMetrics {
     static let secondarySize: CGFloat = 24
     static let secondarySymbol: CGFloat = 12
     static let clusterGap: CGFloat = 16
+
+    // The queue: a 32 pt heading over four 48 pt rows, inset like the rest.
+    static let queueHeight: CGFloat = 224
+    static let queueHeading: CGFloat = 32
+    static let queueRow: CGFloat = 48
+    static let queueArtwork: CGFloat = 32
+    static let queueArtworkRadius: CGFloat = 4
+    static let queueRows = 4
+    // Rows arrive after the frame has settled, 40 ms apart.
+    static let queueRowDuration: TimeInterval = 0.18
+    static let queueFirstDelay: TimeInterval = 0.12
+    static let queueStagger: TimeInterval = 0.04
 
     static let trackThickness: CGFloat = 3
     static let thumbSize: CGFloat = 12
@@ -300,6 +334,98 @@ final class DragThroughLabel: NSTextField {
     override var mouseDownCanMoveWindow: Bool { true }
 }
 
+/// One line of what is coming: artwork, title over artist, duration.
+final class QueueRow: NSView {
+    private let cover = DragThroughImageView()
+    private let title = DragThroughLabel(labelWithString: "")
+    private let artist = DragThroughLabel(labelWithString: "")
+    private let time = DragThroughLabel(labelWithString: "")
+
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    init() {
+        super.init(frame: .zero)
+        cover.wantsLayer = true
+        cover.layer?.cornerRadius = OverlayMetrics.queueArtworkRadius
+        cover.layer?.masksToBounds = true
+        cover.imageScaling = .scaleProportionallyUpOrDown
+        addSubview(cover)
+
+        title.font = .systemFont(ofSize: 12, weight: .medium)
+        title.textColor = .labelColor
+        artist.font = .systemFont(ofSize: 10, weight: .regular)
+        artist.textColor = .secondaryLabelColor
+        time.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        time.textColor = .secondaryLabelColor
+        time.alignment = .right
+        for label in [title, artist, time] {
+            label.lineBreakMode = .byTruncatingTail
+            label.maximumNumberOfLines = 1
+            addSubview(label)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        let art = OverlayMetrics.queueArtwork
+        let gap: CGFloat = 10
+        let timeWidth: CGFloat = 34
+        cover.frame = NSRect(x: 0, y: (bounds.height - art) / 2, width: art, height: art)
+        let textX = art + gap
+        let textWidth = bounds.width - textX - timeWidth - gap
+        title.frame = NSRect(x: textX, y: bounds.midY, width: textWidth, height: 16)
+        artist.frame = NSRect(x: textX, y: bounds.midY - 15, width: textWidth, height: 13)
+        time.frame = NSRect(x: bounds.width - timeWidth, y: bounds.midY - 6,
+                            width: timeWidth, height: 13)
+    }
+
+    private var coverURL: String?
+    private var coverTask: URLSessionDataTask?
+
+    func show(name: String, by who: String, lasting ms: Double, artwork urlString: String?) {
+        title.stringValue = name
+        title.toolTip = name
+        artist.stringValue = who
+        let total = Int(max(ms, 0) / 1000)
+        time.stringValue = String(format: "%d:%02d", total / 60, total % 60)
+        loadCover(urlString)
+    }
+
+    private func placeholder() {
+        cover.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+        cover.contentTintColor = .quaternaryLabelColor
+        cover.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+    }
+
+    private func loadCover(_ urlString: String?) {
+        guard let urlString, let url = URL(string: urlString) else {
+            coverURL = nil
+            coverTask?.cancel()
+            placeholder()
+            return
+        }
+        // Rows are reused as the queue moves, so the same cover is usually
+        // already here.
+        guard urlString != coverURL else { return }
+        coverURL = urlString
+        coverTask?.cancel()
+        placeholder()
+        coverTask = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let data, let image = NSImage(data: data) else { return }
+            DispatchQueue.main.async {
+                guard let self, self.coverURL == urlString else { return }
+                self.cover.image = image
+                self.cover.contentTintColor = nil
+                self.cover.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+        }
+        coverTask?.resume()
+    }
+}
+
 final class OverlayController {
     private var mode: OverlayMode = .mini
     private let panel: OverlayPanel
@@ -307,6 +433,10 @@ final class OverlayController {
     private let root = NSView()
     private let body = NSVisualEffectView()
     private let strip = NSView()
+    private let queue = NSView()
+    private let queueHeading = DragThroughLabel(labelWithString: "UP NEXT")
+    private var queueRows: [QueueRow] = []
+    private var upcoming: [[String: Any]] = []
 
     private let artwork = DragThroughImageView()
     private let titleLabel = DragThroughLabel(labelWithString: "")
@@ -377,6 +507,19 @@ final class OverlayController {
         strip.wantsLayer = true
         strip.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.16).cgColor
         body.addSubview(strip)
+
+        queue.wantsLayer = true
+        body.addSubview(queue)
+
+        queueHeading.font = .systemFont(ofSize: 10, weight: .semibold)
+        queueHeading.textColor = .secondaryLabelColor
+        queue.addSubview(queueHeading)
+
+        queueRows = (0..<OverlayMetrics.queueRows).map { _ in
+            let row = QueueRow()
+            queue.addSubview(row)
+            return row
+        }
 
         artwork.wantsLayer = true
         artwork.layer?.masksToBounds = true
@@ -462,8 +605,10 @@ final class OverlayController {
     // MARK: modes
 
     private func switchMode() {
+        let previous = mode
         mode = mode.next
         layout(for: mode, animated: true)
+        if mode == .extended && previous != .extended { revealQueueRows() }
     }
 
     private var reduceMotion: Bool {
@@ -509,7 +654,30 @@ final class OverlayController {
 
         switch mode {
         case .mini: layoutMini(in: size)
-        case .normal: layoutNormal(in: size)
+        case .normal: layoutNormal(in: size, above: 0)
+        case .extended: layoutNormal(in: size, above: OverlayMetrics.queueHeight)
+        }
+        layoutQueue(in: size, visible: mode == .extended)
+        modeButton.setSymbol(mode.glyph)
+    }
+
+    /// The queue sits under the strip, so the panel grows downward and the
+    /// controls above it never move.
+    private func layoutQueue(in size: NSSize, visible: Bool) {
+        queue.isHidden = !visible
+        guard visible else { return }
+
+        let inset = OverlayMetrics.richInset
+        queue.frame = NSRect(x: 0, y: 0, width: size.width, height: OverlayMetrics.queueHeight)
+
+        let headingY = OverlayMetrics.queueHeight - OverlayMetrics.queueHeading
+        queueHeading.frame = NSRect(x: inset, y: headingY + 9,
+                                    width: size.width - inset * 2, height: 14)
+
+        for (index, row) in queueRows.enumerated() {
+            let y = headingY - CGFloat(index + 1) * OverlayMetrics.queueRow
+            row.frame = NSRect(x: inset, y: y,
+                               width: size.width - inset * 2, height: OverlayMetrics.queueRow)
         }
     }
 
@@ -543,15 +711,17 @@ final class OverlayController {
         }
     }
 
-    private func layoutNormal(in size: NSSize) {
+    /// `above` is how much the queue is taking from the bottom. The player
+    /// itself is laid out the same either way, just higher up.
+    private func layoutNormal(in size: NSSize, above: CGFloat) {
         let inset = OverlayMetrics.richInset
         strip.isHidden = false
         for view in [seek, volume, volumeIcon, elapsedLabel, durationLabel] { view.isHidden = false }
         for button in [shuffleButton!, repeatButton!] { button.isHidden = false }
 
-        strip.frame = NSRect(x: 0, y: 0, width: size.width, height: OverlayMetrics.stripHeight)
+        strip.frame = NSRect(x: 0, y: above, width: size.width, height: OverlayMetrics.stripHeight)
 
-        let top = OverlayMetrics.stripHeight
+        let top = above + OverlayMetrics.stripHeight
         let topHeight = size.height - top
         let art = OverlayMetrics.richArtwork
         // Computed, never read back: this runs inside an animation group
@@ -585,7 +755,7 @@ final class OverlayController {
         // Bottom strip: transport, then the toggles, with volume trailing.
         playPause.isPrimary = true
         let primary = OverlayMetrics.primarySize
-        let stripMid = OverlayMetrics.stripHeight / 2
+        let stripMid = above + OverlayMetrics.stripHeight / 2
         var x = inset
         previousButton.setFrameSize(NSSize(width: OverlayMetrics.transportSize,
                                            height: OverlayMetrics.transportSize))
@@ -739,6 +909,48 @@ final class OverlayController {
         durationLabel.stringValue = clock(durationMs)
 
         loadArtwork(message["artworkUrl"] as? String)
+
+        upcoming = message["queue"] as? [[String: Any]] ?? []
+        fillQueue()
+    }
+
+    private func fillQueue() {
+        for (index, row) in queueRows.enumerated() {
+            guard index < upcoming.count else {
+                row.isHidden = true
+                continue
+            }
+            let track = upcoming[index]
+            row.isHidden = false
+            row.show(name: track["name"] as? String ?? "",
+                     by: track["artist"] as? String ?? "",
+                     lasting: track["durationMs"] as? Double ?? 0,
+                     artwork: track["artworkUrl"] as? String)
+            row.needsLayout = true
+        }
+        // Nothing queued is a real answer, not an empty frame.
+        queueHeading.stringValue = upcoming.isEmpty ? "NOTHING QUEUED" : "UP NEXT"
+    }
+
+    /// The frame has already settled by the time these run, so the rows
+    /// arrive into a panel that has stopped moving.
+    private func revealQueueRows() {
+        guard !reduceMotion else {
+            for row in queueRows { row.alphaValue = 1 }
+            return
+        }
+        for (index, row) in queueRows.enumerated() where !row.isHidden {
+            row.alphaValue = 0
+            let delay = OverlayMetrics.queueFirstDelay
+                + Double(index) * OverlayMetrics.queueStagger
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = OverlayMetrics.queueRowDuration
+                    context.timingFunction = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+                    row.animator().alphaValue = 1
+                }
+            }
+        }
     }
 
     private func clock(_ ms: Double) -> String {

@@ -6,8 +6,20 @@ export const SEARCH_LIMIT = 10;
 const PLAYLIST_PAGE_LIMIT = 50;
 const MAX_PLAYLIST_PAGES = 20;
 
+// The extended panel shows four rows and nothing scrolls, so asking for
+// more would be fetching what no one can see.
+export const QUEUE_LIMIT = 4;
+
 // Spotify's repeat cycles through these, in this order.
 export const REPEAT_MODES = ['off', 'context', 'track'];
+
+// A queue row draws the cover at 32 pt, so the 640 px version is a waste
+// of a download. Spotify lists images largest first, but not reliably.
+function smallestCover(images) {
+  if (!Array.isArray(images) || images.length === 0) return null;
+  return images.reduce((best, image) =>
+    (image?.width ?? Infinity) < (best?.width ?? Infinity) ? image : best).url ?? null;
+}
 
 function artistsOf(item) {
   return (item?.artists ?? []).map((a) => a.name).join(', ');
@@ -81,6 +93,19 @@ export function createApi({ getToken, fetchImpl = fetch }) {
         name: t.name,
         artist: artistsOf(t),
         uri: t.uri,
+      }));
+    },
+
+    async queue() {
+      // Answers 204 with no body when nothing is playing, which `request`
+      // hands back as null rather than throwing.
+      const data = await request('GET', '/me/player/queue');
+      return (data?.queue ?? []).slice(0, QUEUE_LIMIT).map((t) => ({
+        name: t.name,
+        artist: artistsOf(t),
+        durationMs: t.duration_ms ?? 0,
+        uri: t.uri,
+        artworkUrl: smallestCover(t.album?.images),
       }));
     },
 
