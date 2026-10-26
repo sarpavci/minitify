@@ -154,6 +154,21 @@ test('setVolume accepts the boundaries', async () => {
   assert.equal(f.calls.length, 2);
 });
 
+test('seek asks for a whole number of milliseconds', async () => {
+  const f = stubFetch({ status: 204 });
+  await api(f).seek(61_500.7);
+  assert.match(f.calls[0].url, /\/me\/player\/seek\?position_ms=61501$/);
+  assert.equal(f.calls[0].options.method, 'PUT');
+});
+
+test('seek rejects a position that is not a finite number of ms', async () => {
+  const f = stubFetch({ status: 204 });
+  await assert.rejects(() => api(f).seek(-1), /position/i);
+  await assert.rejects(() => api(f).seek('half way'), /position/i);
+  await assert.rejects(() => api(f).seek(Infinity), /position/i);
+  assert.equal(f.calls.length, 0, 'no request should reach Spotify');
+});
+
 test('a 429 response throws an error carrying retryAfter', async () => {
   const f = stubFetch({ status: 429, headers: { 'retry-after': '18' }, body: { error: { message: 'rate' } } });
   const err = await api(f).next().catch((e) => e);

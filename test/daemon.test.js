@@ -24,6 +24,7 @@ function fakeApi(overrides = {}) {
     resume: record('resume'),
     next: record('next'),
     previous: record('previous'),
+    seek: record('seek'),
     setVolume: record('setVolume'),
     setShuffle: record('setShuffle'),
     setRepeat: record('setRepeat'),
@@ -51,6 +52,13 @@ test('handleCommand routes next and prev', async () => {
   await handleCommand({ name: 'next' }, d);
   await handleCommand({ name: 'prev' }, d);
   assert.deepEqual(d.api.calls.map((c) => c[0]), ['next', 'previous']);
+});
+
+test('handleCommand routes seek, in milliseconds', async () => {
+  const d = deps();
+  const result = await handleCommand({ name: 'seek', args: [61500] }, d);
+  assert.equal(result.ok, true);
+  assert.deepEqual(d.api.calls.at(-1), ['seek', 61500]);
 });
 
 test('handleCommand returns ok:false for an unknown command', async () => {
@@ -308,6 +316,25 @@ test('the player spawns against the page url built from the port', async () => {
   const player = createPlayer({ pagePort: 4321, spawnImpl: (bin, args) => { seenArgs = args; return fakeChild(); } });
   player.start();
   assert.match(seenArgs[0], /^http:\/\/127\.0\.0\.1:4321\/player$/);
+});
+
+test('a media key message carries its value through', async () => {
+  // The overlay's sliders travel the same path as the media keys, and a
+  // volume or seek is meaningless without the number attached.
+  const child = fakeChild();
+  const seen = [];
+  const player = createPlayer({
+    pagePort: 1234,
+    spawnImpl: () => child,
+    onMediaKey: (command, value) => seen.push([command, value]),
+  });
+  player.start();
+
+  child.stdout.write(JSON.stringify({ type: 'mediakey', command: 'toggle' }) + '\n');
+  child.stdout.write(JSON.stringify({ type: 'mediakey', command: 'vol', value: 55 }) + '\n');
+  await new Promise((r) => setImmediate(r));
+
+  assert.deepEqual(seen, [['toggle', undefined], ['vol', 55]]);
 });
 
 test('waitForState settles on any state, playing or paused', async () => {

@@ -140,6 +140,13 @@ export function createApi({ getToken, fetchImpl = fetch }) {
       return request('PUT', `/me/player/repeat?state=${mode}`);
     },
 
+    seek(positionMs) {
+      if (typeof positionMs !== 'number' || !Number.isFinite(positionMs) || positionMs < 0) {
+        return Promise.reject(new Error('Seek position must be a number of milliseconds'));
+      }
+      return request('PUT', `/me/player/seek?position_ms=${Math.round(positionMs)}`);
+    },
+
     setVolume(percent) {
       if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) {
         return Promise.reject(new Error('Volume must be between 0 and 100'));

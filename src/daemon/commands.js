@@ -219,6 +219,9 @@ export async function handleCommand(cmd, deps) {
       case 'prev':
         return ok(await onActiveDevice(deps, () => api.previous()));
 
+      case 'seek':
+        return ok(await onActiveDevice(deps, () => api.seek(args[0])));
+
       case 'vol':
         return ok(await onActiveDevice(deps, () => api.setVolume(args[0])));
 

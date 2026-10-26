@@ -65,7 +65,7 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
     } catch {
       return; // the player only ever writes JSON; anything else is noise
     }
-    if (message.type === 'mediakey') onMediaKey?.(message.command);
+    if (message.type === 'mediakey') onMediaKey?.(message.command, message.value);
     // The panel's own close button dismisses it, so the daemon has to
     // learn about it or the next `minitify overlay` would try to hide an
     // already-hidden panel.

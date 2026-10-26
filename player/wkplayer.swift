@@ -47,10 +47,14 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         // The overlay's buttons travel the same path as the media keys, so
         // the daemon handles both with one code path.
-        overlay = OverlayController { [weak self] action in
+        overlay = OverlayController { [weak self] action, value in
             if action == "close" {
                 self?.overlay.hide()
                 emit(["type": "overlay", "show": false])
+            } else if let value {
+                // The sliders send a number with theirs: a volume percent
+                // or a seek position in milliseconds.
+                emit(["type": "mediakey", "command": action, "value": value])
             } else {
                 emit(["type": "mediakey", "command": action])
             }
