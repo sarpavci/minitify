@@ -94,6 +94,38 @@ test('a scope the token predates says how to fix it', async () => {
   assert.match(result.error, /minitify login/);
 });
 
+test('tracks marks rows that are in Liked Songs', async () => {
+  // The heart is read-only: asking Spotify whether a track is saved is
+  // forbidden to this app, but the Liked Songs list answers it for free.
+  const d = deps();
+  d.api.savedTracks = async () => [{ uri: 'spotify:track:b' }];
+  d.api.playlistTracks = async () => [
+    { name: 'a', uri: 'spotify:track:a' },
+    { name: 'b', uri: 'spotify:track:b' },
+  ];
+
+  const result = await handleCommand({ name: 'tracks', args: ['spotify:playlist:7'] }, d);
+
+  assert.deepEqual(result.data.tracks.map((t) => t.saved), [false, true]);
+});
+
+test('tracks explains a playlist Spotify will not open rather than failing', async () => {
+  // Development Mode only gets the items of playlists the user owns.
+  const d = deps();
+  d.api.savedTracks = async () => [];
+  d.api.playlistTracks = async () => {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  };
+
+  const result = await handleCommand({ name: 'tracks', args: ['spotify:playlist:7'] }, d);
+
+  assert.equal(result.ok, true, 'the window still has something to show');
+  assert.deepEqual(result.data.tracks, []);
+  assert.match(result.data.note, /follow/i);
+});
+
 test('liked returns the saved tracks with their saved flag already set', async () => {
   // The panel draws a filled heart on every row, so asking per row would
   // be one request each. They come back marked.

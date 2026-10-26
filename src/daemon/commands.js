@@ -223,6 +223,32 @@ export async function handleCommand(cmd, deps) {
         return ok();
       }
 
+      case 'tracks': {
+        const uri = args[0];
+        if (!uri) return fail('tracks needs a playlist uri');
+
+        // Liked Songs is the only thing that answers "is this saved?" for
+        // this app, so it doubles as the lookup behind every heart.
+        const saved = new Set((await api.savedTracks()).map((t) => t.uri));
+
+        let tracks = [];
+        let note = null;
+        try {
+          tracks = await api.playlistTracks(uri);
+        } catch (err) {
+          // Development Mode only gets the items of playlists the user
+          // owns. The window can still play this one; it just cannot
+          // list it, and saying so beats an empty pane.
+          if (err.status !== 403) throw err;
+          note = 'Spotify does not let this app list a playlist you only follow. '
+            + 'It can still be played.';
+        }
+        return ok({
+          note,
+          tracks: tracks.map((track) => ({ ...track, saved: saved.has(track.uri) })),
+        });
+      }
+
       case 'liked': {
         // Everything in here is saved by definition, so the panel is told
         // so rather than asking about each row in turn.

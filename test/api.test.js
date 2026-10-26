@@ -154,6 +154,30 @@ test('setVolume accepts the boundaries', async () => {
   assert.equal(f.calls.length, 2);
 });
 
+test('playlistTracks reads the items path, not the gone tracks path', async () => {
+  // The 2026 /items response puts the track under `item`, where the old
+  // /tracks response and Liked Songs both use `track`.
+  const f = stubFetch({
+    body: {
+      items: [{
+        item: {
+          name: 'a',
+          artists: [{ name: 'Daft Punk' }],
+          duration_ms: 1000,
+          uri: 'spotify:track:a',
+          album: { images: [{ url: 'https://i/a.jpg', width: 64 }] },
+        },
+      }],
+      next: null,
+    },
+  });
+
+  const tracks = await api(f).playlistTracks('spotify:playlist:7');
+
+  assert.match(f.calls[0].url, /\/playlists\/7\/items\?/);
+  assert.equal(tracks[0].name, 'a');
+});
+
 test('savedTracks pages through Liked Songs', async () => {
   const page = (names, next) => ({
     body: {
@@ -177,6 +201,20 @@ test('savedTracks pages through Liked Songs', async () => {
   assert.equal(saved[0].name, 'a');
   assert.equal(saved[0].artworkUrl, 'https://i/a.jpg');
   assert.equal(f.calls.length, 2, 'the second page has to be followed');
+});
+
+test('a podcast episode in a playlist is not offered as a track', async () => {
+  const f = stubFetch({
+    body: {
+      items: [
+        { item: { type: 'episode', name: 'ep', uri: 'spotify:episode:1' } },
+        { item: { type: 'track', name: 'a', artists: [], duration_ms: 1, uri: 'spotify:track:a' } },
+      ],
+      next: null,
+    },
+  });
+  const tracks = await api(f).playlistTracks('spotify:playlist:7');
+  assert.deepEqual(tracks.map((t) => t.name), ['a']);
 });
 
 test('savedTracks skips items Spotify has emptied out', async () => {

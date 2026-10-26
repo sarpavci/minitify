@@ -21,6 +21,25 @@ function smallestCover(images) {
     (image?.width ?? Infinity) < (best?.width ?? Infinity) ? image : best).url ?? null;
 }
 
+// Liked Songs and a playlist's items are the same shape behind different
+// paths, and both page.
+function trackFrom(item) {
+  // The 2026 /items response carries the track under `item`; Liked Songs
+  // and the old /tracks path both use `track`. A track pulled from the
+  // catalogue comes back as a null in either.
+  const track = item?.item ?? item?.track;
+  if (!track) return null;
+  // A playlist can hold podcast episodes, which have none of this.
+  if (track.type && track.type !== 'track') return null;
+  return {
+    name: track.name,
+    artist: artistsOf(track),
+    durationMs: track.duration_ms ?? 0,
+    uri: track.uri,
+    artworkUrl: smallestCover(track.album?.images),
+  };
+}
+
 // The library endpoints take bare ids, not uris.
 const bareId = (uri) => String(uri).split(':').pop();
 
@@ -63,6 +82,20 @@ export function createApi({ getToken, fetchImpl = fetch }) {
     return data;
   }
 
+  async function walkTracks(firstPath) {
+    const tracks = [];
+    let path = firstPath;
+    for (let page = 0; page < MAX_PLAYLIST_PAGES && path; page += 1) {
+      const data = await request('GET', path);
+      for (const item of data?.items ?? []) {
+        const track = trackFrom(item);
+        if (track) tracks.push(track);
+      }
+      path = data?.next ? data.next.replace(BASE, '') : null;
+    }
+    return tracks;
+  }
+
   function deviceQuery(deviceId) {
     return deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
   }
@@ -100,26 +133,16 @@ export function createApi({ getToken, fetchImpl = fetch }) {
     },
 
     /// Liked Songs, in the order Spotify keeps them.
-    async savedTracks() {
-      const tracks = [];
-      let path = `/me/tracks?limit=${PLAYLIST_PAGE_LIMIT}&offset=0`;
+    savedTracks() {
+      return walkTracks(`/me/tracks?limit=${PLAYLIST_PAGE_LIMIT}&offset=0`);
+    },
 
-      for (let page = 0; page < MAX_PLAYLIST_PAGES && path; page += 1) {
-        const data = await request('GET', path);
-        for (const item of data?.items ?? []) {
-          // A track pulled from the catalogue comes back as a null here.
-          if (!item?.track) continue;
-          tracks.push({
-            name: item.track.name,
-            artist: artistsOf(item.track),
-            durationMs: item.track.duration_ms ?? 0,
-            uri: item.track.uri,
-            artworkUrl: smallestCover(item.track.album?.images),
-          });
-        }
-        path = data?.next ? data.next.replace(BASE, '') : null;
-      }
-      return tracks;
+    /// A playlist's contents. The February 2026 API renamed this from
+    /// `/tracks` to `/items`, and the old path now answers 403.
+    playlistTracks(uri) {
+      return walkTracks(
+        `/playlists/${bareId(uri)}/items?limit=${PLAYLIST_PAGE_LIMIT}&offset=0`,
+      );
     },
 
     /// Which of these are already in Liked Songs, in the order asked.

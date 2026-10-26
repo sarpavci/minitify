@@ -140,6 +140,9 @@ export async function startDaemon() {
   player.start();
 
   const server = createServer((socket) => {
+    // Same reason as the client: a command carrying a multi-byte search
+    // term must not be split into two strings across a chunk boundary.
+    socket.setEncoding('utf8');
     let buffer = '';
     socket.on('data', async (chunk) => {
       buffer += chunk;

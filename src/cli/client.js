@@ -73,13 +73,20 @@ export async function sendCommand(cmd, options) {
   const socket = await connectOrStart(options);
 
   return new Promise((resolve, reject) => {
-    let buffer = '';
+    // Kept whole and decoded once. A reply longer than a socket buffer
+    // arrives in pieces, and a character straddling the boundary is
+    // mangled if each piece is turned into a string on its own — which
+    // Liked Songs, full of Korean and Thai titles, does every time.
+    const chunks = [];
     socket.on('data', (chunk) => {
-      buffer += chunk;
+      chunks.push(chunk);
     });
     socket.on('end', () => {
+      const text = chunks.some((chunk) => typeof chunk === 'string')
+        ? chunks.join('')
+        : Buffer.concat(chunks).toString('utf8');
       try {
-        resolve(JSON.parse(buffer));
+        resolve(JSON.parse(text));
       } catch {
         reject(new Error('the daemon sent an unreadable reply'));
       }

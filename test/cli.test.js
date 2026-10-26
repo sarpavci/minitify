@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { EventEmitter } from 'node:events';
 
 import { parseArgs } from '../src/cli/commands.js';
-import { connectOrStart } from '../src/cli/client.js';
+import { connectOrStart, sendCommand } from '../src/cli/client.js';
 
 let dir;
 
@@ -38,6 +39,29 @@ test('parseArgs reads vol as a number', () => {
 test('parseArgs rejects vol without a number', () => {
   assert.throws(() => parseArgs(['vol']), /vol needs/);
   assert.throws(() => parseArgs(['vol', 'loud']), /vol needs/);
+});
+
+test('a reply split across chunks mid-character still parses', async () => {
+  // Reproduces a live failure: Liked Songs with Korean and Thai titles
+  // came back as broken JSON. The daemon's reply arrives in 64 KB chunks
+  // and a multi-byte character straddles the boundary.
+  const reply = JSON.stringify({ ok: true, data: [{ name: '돌덩이', artist: 'Ha Hyun Woo' }] });
+  const whole = Buffer.from(reply, 'utf8');
+  // Split inside the first Korean character.
+  const cut = whole.indexOf(Buffer.from('돌', 'utf8')) + 1;
+
+  const socket = new EventEmitter();
+  socket.write = () => {};
+  socket.setEncoding = function (enc) { this.encoding = enc; };
+
+  const pending = sendCommand({ name: 'liked' }, { connectImpl: async () => socket });
+  await new Promise((r) => setImmediate(r));
+  socket.emit('data', whole.subarray(0, cut));
+  socket.emit('data', whole.subarray(cut));
+  socket.emit('end');
+
+  const result = await pending;
+  assert.equal(result.data[0].name, '돌덩이');
 });
 
 test('parseArgs passes the simple control commands through', () => {
