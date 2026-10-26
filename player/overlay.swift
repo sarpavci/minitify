@@ -91,9 +91,15 @@ final class OverlayPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         backgroundColor = .clear
         isOpaque = false
-        // The window is wider than the panel it draws. A shadow would be
-        // cast by the whole frame, so the body draws its own.
-        hasShadow = false
+        // Drag the panel by its body. Without this the window cannot be
+        // moved at all, since it has no title bar to grab.
+        isMovableByWindowBackground = true
+        // The window server builds the shadow from the alpha channel, so it
+        // hugs the rounded body and ignores the transparent gutters. A
+        // shadow drawn into the window instead would fill those gutters
+        // with pixels — grey where there should be nothing, and solid
+        // enough to swallow the clicks that are supposed to pass through.
+        hasShadow = true
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
     }
@@ -220,9 +226,9 @@ final class CircleButton: NSButton {
             : NSColor(calibratedWhite: 0.87, alpha: 0.93)
         layer?.backgroundColor = (hovering ? NSColor.systemGreen.withAlphaComponent(0.85) : base).cgColor
         contentTintColor = hovering ? .black : .labelColor
-        layer?.shadowOpacity = 0.25
-        layer?.shadowRadius = 6
-        layer?.shadowOffset = CGSize(width: 0, height: -2)
+        // No layer shadow: it would paint into the gutter around the
+        // circle, and the gutter has to stay empty for clicks to fall
+        // through it. The window's own shadow already follows this shape.
     }
 }
 
@@ -347,15 +353,11 @@ final class OverlayController {
         body.state = .active
         body.wantsLayer = true
         body.layer?.cornerRadius = OverlayMetrics.cornerRadius
-        body.layer?.masksToBounds = false
+        // Clipped, so the material actually takes the corner radius. The
+        // shadow is the window's job, not this layer's.
+        body.layer?.masksToBounds = true
         body.layer?.borderWidth = OverlayMetrics.hairline
         body.layer?.borderColor = NSColor.white.withAlphaComponent(0.23).cgColor
-        body.layer?.shadowOpacity = 0.25
-        body.layer?.shadowRadius = 32
-        body.layer?.shadowOffset = CGSize(width: 0, height: -14)
-        // The material has to be clipped to the corner; the shadow must not
-        // be. A mask layer gives both.
-        body.maskImage = nil
         root.addSubview(body)
 
         strip.wantsLayer = true
@@ -487,10 +489,9 @@ final class OverlayController {
         let gutter = mode.gutter
         let size = mode.body
         body.frame = NSRect(x: gutter.left, y: gutter.bottom, width: size.width, height: size.height)
-        body.layer?.shadowPath = CGPath(roundedRect: body.bounds,
-                                        cornerWidth: OverlayMetrics.cornerRadius,
-                                        cornerHeight: OverlayMetrics.cornerRadius,
-                                        transform: nil)
+        // The window shadow is rebuilt from the new alpha mask; telling the
+        // server the shape changed is what makes it follow the resize.
+        panel.invalidateShadow()
 
         switch mode {
         case .mini: layoutMini(in: size)
