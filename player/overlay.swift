@@ -516,6 +516,7 @@ final class OverlayController {
     private var repeatButton: SymbolButton!
     private var modeButton: CircleButton!
     private var closeButton: CircleButton!
+    private var libraryButton: CircleButton!
 
     private var artworkTask: URLSessionDataTask?
     private var artworkURL: String?
@@ -651,7 +652,9 @@ final class OverlayController {
         modeButton = CircleButton(symbol: "arrow.up.left.and.arrow.down.right",
                                   accessibility: "Switch mode", action: "mode")
         closeButton = CircleButton(symbol: "xmark", accessibility: "Hide overlay", action: "close")
-        for circle in [modeButton!, closeButton!] {
+        libraryButton = CircleButton(symbol: "books.vertical",
+                                     accessibility: "Your library", action: "library")
+        for circle in [modeButton!, closeButton!, libraryButton!] {
             circle.target = self
             circle.action = #selector(circleTapped(_:))
             circle.alphaValue = 0
@@ -893,12 +896,14 @@ final class OverlayController {
             x: onRight ? bodyRect.maxX + gap : bodyRect.minX - gap - size,
             y: bodyRect.maxY - OverlayMetrics.detachedTop - size))
 
-        // Close only exists where there is a gutter to hold it.
+        // Close and library only exist where there is a gutter to hold
+        // them, and they travel together along the trailing edge.
         closeButton.isHidden = mode == .mini
+        libraryButton.isHidden = mode == .mini
         let panelIsHigh = centre.y > screenMidY()
-        closeButton.setFrameOrigin(NSPoint(
-            x: bodyRect.maxX - size,
-            y: panelIsHigh ? bodyRect.minY - gap - size : bodyRect.maxY + gap))
+        let y = panelIsHigh ? bodyRect.minY - gap - size : bodyRect.maxY + gap
+        closeButton.setFrameOrigin(NSPoint(x: bodyRect.maxX - size, y: y))
+        libraryButton.setFrameOrigin(NSPoint(x: bodyRect.maxX - size * 2 - gap, y: y))
     }
 
     private func bodyCentreOnScreen(_ bodyRect: NSRect) -> NSPoint {
@@ -955,16 +960,18 @@ final class OverlayController {
 
         let show = inside
         if reduceMotion {
-            modeButton.alphaValue = show ? 1 : 0
-            closeButton.alphaValue = show ? 1 : 0
+            for circle in [modeButton!, closeButton!, libraryButton!] {
+                circle.alphaValue = show ? 1 : 0
+            }
             return
         }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = OverlayMetrics.revealDuration
             context.timingFunction = CAMediaTimingFunction(
                 controlPoints: show ? 0 : 0.4, show ? 0 : 0, show ? 0.2 : 1, 1)
-            modeButton.animator().alphaValue = show ? 1 : 0
-            closeButton.animator().alphaValue = show ? 1 : 0
+            for circle in [modeButton!, closeButton!, libraryButton!] {
+                circle.animator().alphaValue = show ? 1 : 0
+            }
         }
     }
 

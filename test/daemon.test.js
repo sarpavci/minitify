@@ -453,6 +453,40 @@ test('the player spawns against the page url built from the port', async () => {
   assert.match(seenArgs[0], /^http:\/\/127\.0\.0\.1:4321\/player$/);
 });
 
+test('the player can ask the daemon for something', async () => {
+  // The library window needs data on demand: playlists and tracks are too
+  // big to push on every state change and are wanted only when it is open.
+  const child = fakeChild();
+  const asked = [];
+  const player = createPlayer({
+    pagePort: 1234,
+    spawnImpl: () => child,
+    onRequest: (request) => asked.push(request),
+  });
+  player.start();
+
+  child.stdout.write(JSON.stringify({
+    type: 'request', id: 7, name: 'tracks', args: ['spotify:playlist:1'],
+  }) + '\n');
+  await new Promise((r) => setImmediate(r));
+
+  assert.deepEqual(asked, [{ id: 7, name: 'tracks', args: ['spotify:playlist:1'] }]);
+});
+
+test('an answer goes back to the player as one line', async () => {
+  const child = fakeChild();
+  const written = [];
+  child.stdin.on('data', (d) => written.push(d.toString()));
+  const player = createPlayer({ pagePort: 1234, spawnImpl: () => child });
+  player.start();
+
+  player.sendAnswer(7, { ok: true, data: [1, 2] });
+  await new Promise((r) => setImmediate(r));
+
+  const line = JSON.parse(written.join(''));
+  assert.deepEqual(line, { type: 'answer', id: 7, ok: true, data: [1, 2] });
+});
+
 test('a media key message carries its value through', async () => {
   // The overlay's sliders travel the same path as the media keys, and a
   // volume or seek is meaningless without the number attached.

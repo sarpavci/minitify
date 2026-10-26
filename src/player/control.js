@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_BIN = fileURLToPath(new URL('../../player/wkplayer', import.meta.url));
 
-export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImpl = spawn, binPath = DEFAULT_BIN }) {
+export function createPlayer({ pagePort, pageSecret, onMediaKey, onRequest, onLog, spawnImpl = spawn, binPath = DEFAULT_BIN }) {
   let child = null;
   let deviceId = null;
   let lastError = null;
@@ -66,6 +66,11 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
       return; // the player only ever writes JSON; anything else is noise
     }
     if (message.type === 'mediakey') onMediaKey?.(message.command, message.value);
+    // The library window asks for what it needs rather than being sent
+    // everything on every state change.
+    else if (message.type === 'request') {
+      onRequest?.({ id: message.id, name: message.name, args: message.args ?? [] });
+    }
     // The panel's own close button dismisses it, so the daemon has to
     // learn about it or the next `minitify overlay` would try to hide an
     // already-hidden panel.
@@ -208,6 +213,10 @@ export function createPlayer({ pagePort, pageSecret, onMediaKey, onLog, spawnImp
 
     sendNowPlaying(info) {
       send({ type: 'nowplaying', ...info });
+    },
+
+    sendAnswer(id, result) {
+      send({ type: 'answer', id, ...result });
     },
 
     stop() {

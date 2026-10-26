@@ -22,6 +22,10 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
     var overlay: OverlayController!
+    var library: LibraryController!
+    // Requests the library window has in flight, keyed by the id sent out.
+    var pending: [Int: ([String: Any]) -> Void] = [:]
+    var nextRequestId = 1
     let pageURL: URL
 
     init(pageURL: URL) {
@@ -51,6 +55,9 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             if action == "close" {
                 self?.overlay.hide()
                 emit(["type": "overlay", "show": false])
+            } else if action == "library" {
+                guard let self else { return }
+                if self.library.isVisible { self.library.hide() } else { self.library.show() }
             } else if let value {
                 // Controls that carry something: a volume percent, a seek
                 // position in milliseconds, or the uri of a queue row.
@@ -59,6 +66,26 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 emit(["type": "mediakey", "command": action])
             }
         }
+
+        // Requests carry an id so an answer can find its way back to the
+        // call that asked; replies arrive on stdin like everything else.
+        library = LibraryController(
+            request: { [weak self] name, args, done in
+                guard let self else { return }
+                let id = self.nextRequestId
+                self.nextRequestId += 1
+                self.pending[id] = done
+                emit(["type": "request", "id": id, "name": name, "args": args])
+            },
+            onPlay: { uri, context in
+                // Inside its collection, so the queue follows from there.
+                if let context {
+                    emit(["type": "mediakey", "command": "play", "value": context])
+                    emit(["type": "mediakey", "command": "jump", "value": uri])
+                } else {
+                    emit(["type": "mediakey", "command": "jump", "value": uri])
+                }
+            })
 
         registerMediaKeys()
         readCommands()
@@ -123,9 +150,15 @@ final class Delegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                     case "nowplaying":
                         self.updateNowPlaying(message)
                         self.overlay.apply(message)
+                        self.library.nowPlaying(message["uri"] as? String)
                     case "overlay":
                         if message["show"] as? Bool == true { self.overlay.show() }
                         else { self.overlay.hide() }
+                    case "answer":
+                        // The reply to one of the library's requests.
+                        if let id = message["id"] as? Int, let done = self.pending.removeValue(forKey: id) {
+                            done(message)
+                        }
                     default:
                         break
                     }

@@ -123,6 +123,20 @@ export async function startDaemon() {
     pagePort: httpServer.port,
     pageSecret: secret,
     onLog: log,
+    // What the library window asks for. Allowed by name rather than
+    // passed straight through: the player must not be able to reach
+    // `quit` or start playback by forging a request.
+    onRequest: ({ id, name, args }) => {
+      const READABLE = new Set(['playlists', 'liked', 'tracks', 'status']);
+      if (!READABLE.has(name)) {
+        player.sendAnswer(id, { ok: false, error: `Unknown request: ${name}` });
+        return;
+      }
+      handleCommand({ name, args }, { api, player, shutdown, playbackState })
+        .then((result) => player.sendAnswer(id, result))
+        .catch((err) => player.sendAnswer(id, { ok: false, error: err.message }));
+    },
+
     // Media keys and the overlay's controls arrive the same way. The
     // sliders send a number with theirs.
     onMediaKey: (command, value) => {
