@@ -63,6 +63,20 @@ test('handleCommand routes seek, in milliseconds', async () => {
   assert.deepEqual(d.api.calls.at(-1), ['seek', 61500]);
 });
 
+test('a library write Spotify has closed says so, not just Forbidden', async () => {
+  const d = deps();
+  d.api.setSaved = async () => {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  };
+
+  const result = await handleCommand({ name: 'like', args: ['spotify:track:a', true] }, d);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Development Mode/i);
+});
+
 test('a scope the token predates says how to fix it', async () => {
   // Spotify's own wording says nothing a user can act on, and a refresh
   // token carries the scopes it was issued with — no amount of retrying

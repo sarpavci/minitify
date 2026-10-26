@@ -26,6 +26,14 @@ function describe(err) {
   if (/insufficient client scope/i.test(err.message ?? '')) {
     return `${err.message} — this needs a permission your login predates. Run: minitify login`;
   }
+  // Spotify closed the library write endpoints to Development Mode apps
+  // in February 2026. Listing Liked Songs still answers; saving to them
+  // and asking whether a track is saved both return a bare Forbidden,
+  // which reads like a bug in this program and is not one.
+  if (err.status === 403 && /^forbidden$/i.test(err.message ?? '')) {
+    return 'Spotify refused this: changing your library needs Extended Quota mode, '
+      + 'which Development Mode apps no longer have. Nothing here can work around it.';
+  }
   return err.message;
 }
 
