@@ -48,6 +48,16 @@ test('authorizeUrl requests every scope the player needs', () => {
   for (const needed of SCOPES.split(' ')) assert.ok(scope.includes(needed), `missing ${needed}`);
 });
 
+test('the library scopes are asked for by name', () => {
+  // The test above walks SCOPES itself, so it passes whatever is in there.
+  // These two are named because losing them is silent: a refresh token
+  // carries the scopes it was issued with, so the hearts would simply
+  // stop working until someone logged in again.
+  for (const needed of ['user-library-read', 'user-library-modify']) {
+    assert.ok(SCOPES.split(' ').includes(needed), `missing ${needed}`);
+  }
+});
+
 test('exchangeCode sends Basic auth and the authorization_code grant', async () => {
   const f = fakeFetch({ body: { access_token: 'a', refresh_token: 'r', expires_in: 3600 } });
   await exchangeCode('CODE', CREDS, f);

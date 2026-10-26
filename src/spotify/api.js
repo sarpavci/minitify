@@ -21,6 +21,9 @@ function smallestCover(images) {
     (image?.width ?? Infinity) < (best?.width ?? Infinity) ? image : best).url ?? null;
 }
 
+// The library endpoints take bare ids, not uris.
+const bareId = (uri) => String(uri).split(':').pop();
+
 function artistsOf(item) {
   return (item?.artists ?? []).map((a) => a.name).join(', ');
 }
@@ -94,6 +97,41 @@ export function createApi({ getToken, fetchImpl = fetch }) {
         artist: artistsOf(t),
         uri: t.uri,
       }));
+    },
+
+    /// Liked Songs, in the order Spotify keeps them.
+    async savedTracks() {
+      const tracks = [];
+      let path = `/me/tracks?limit=${PLAYLIST_PAGE_LIMIT}&offset=0`;
+
+      for (let page = 0; page < MAX_PLAYLIST_PAGES && path; page += 1) {
+        const data = await request('GET', path);
+        for (const item of data?.items ?? []) {
+          // A track pulled from the catalogue comes back as a null here.
+          if (!item?.track) continue;
+          tracks.push({
+            name: item.track.name,
+            artist: artistsOf(item.track),
+            durationMs: item.track.duration_ms ?? 0,
+            uri: item.track.uri,
+            artworkUrl: smallestCover(item.track.album?.images),
+          });
+        }
+        path = data?.next ? data.next.replace(BASE, '') : null;
+      }
+      return tracks;
+    },
+
+    /// Which of these are already in Liked Songs, in the order asked.
+    async isSaved(uris) {
+      if (!uris?.length) return [];
+      const ids = uris.map(bareId).join(',');
+      const data = await request('GET', `/me/tracks/contains?ids=${encodeURIComponent(ids)}`);
+      return Array.isArray(data) ? data.map(Boolean) : uris.map(() => false);
+    },
+
+    setSaved(uri, saved) {
+      return request(saved ? 'PUT' : 'DELETE', `/me/tracks?ids=${bareId(uri)}`);
     },
 
     async queue() {

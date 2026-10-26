@@ -12,6 +12,9 @@ export const SCOPES = [
   'user-read-playback-state',
   'playlist-read-private',
   'playlist-read-collaborative',
+  // Liked Songs, and the hearts on every row.
+  'user-library-read',
+  'user-library-modify',
 ].join(' ');
 
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';

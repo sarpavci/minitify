@@ -154,6 +154,59 @@ test('setVolume accepts the boundaries', async () => {
   assert.equal(f.calls.length, 2);
 });
 
+test('savedTracks pages through Liked Songs', async () => {
+  const page = (names, next) => ({
+    body: {
+      items: names.map((name) => ({
+        track: {
+          name,
+          artists: [{ name: 'Daft Punk' }],
+          duration_ms: 1000,
+          uri: `spotify:track:${name}`,
+          album: { images: [{ url: `https://i/${name}.jpg`, width: 64 }] },
+        },
+      })),
+      next,
+    },
+  });
+  const f = stubFetch(page(['a', 'b'], 'more'), page(['c'], null));
+
+  const saved = await api(f).savedTracks();
+
+  assert.equal(saved.length, 3);
+  assert.equal(saved[0].name, 'a');
+  assert.equal(saved[0].artworkUrl, 'https://i/a.jpg');
+  assert.equal(f.calls.length, 2, 'the second page has to be followed');
+});
+
+test('savedTracks skips items Spotify has emptied out', async () => {
+  // A track removed from the catalogue comes back as a null track.
+  const f = stubFetch({ body: { items: [{ track: null }, { track: null }], next: null } });
+  assert.deepEqual(await api(f).savedTracks(), []);
+});
+
+test('isSaved asks about a batch and keeps the order', async () => {
+  const f = stubFetch({ body: [true, false, true] });
+  const flags = await api(f).isSaved(['spotify:track:a', 'spotify:track:b', 'spotify:track:c']);
+  assert.deepEqual(flags, [true, false, true]);
+  assert.match(f.calls[0].url, /\/me\/tracks\/contains\?ids=a%2Cb%2Cc$/);
+});
+
+test('isSaved asks nothing when given nothing', async () => {
+  const f = stubFetch({ body: [] });
+  assert.deepEqual(await api(f).isSaved([]), []);
+  assert.equal(f.calls.length, 0);
+});
+
+test('setSaved adds and removes by bare id', async () => {
+  const f = stubFetch({ status: 200 }, { status: 200 });
+  await api(f).setSaved('spotify:track:a', true);
+  await api(f).setSaved('spotify:track:a', false);
+  assert.equal(f.calls[0].options.method, 'PUT');
+  assert.equal(f.calls[1].options.method, 'DELETE');
+  assert.match(f.calls[0].url, /\/me\/tracks\?ids=a$/);
+});
+
 test('playContext can start partway in, which is how a queue row is reached', async () => {
   const f = stubFetch({ status: 204 });
   await api(f).playContext('spotify:playlist:1', 'DEV', 'spotify:track:9');

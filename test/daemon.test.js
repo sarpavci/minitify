@@ -63,6 +63,69 @@ test('handleCommand routes seek, in milliseconds', async () => {
   assert.deepEqual(d.api.calls.at(-1), ['seek', 61500]);
 });
 
+test('a scope the token predates says how to fix it', async () => {
+  // Spotify's own wording says nothing a user can act on, and a refresh
+  // token carries the scopes it was issued with — no amount of retrying
+  // gets this one back.
+  const d = deps();
+  d.api.savedTracks = async () => {
+    const err = new Error('Insufficient client scope');
+    err.status = 403;
+    throw err;
+  };
+
+  const result = await handleCommand({ name: 'liked' }, d);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /minitify login/);
+});
+
+test('liked returns the saved tracks with their saved flag already set', async () => {
+  // The panel draws a filled heart on every row, so asking per row would
+  // be one request each. They come back marked.
+  const d = deps();
+  d.api.savedTracks = async () => [
+    { name: 'a', uri: 'spotify:track:a' },
+    { name: 'b', uri: 'spotify:track:b' },
+  ];
+  const result = await handleCommand({ name: 'liked' }, d);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.map((t) => t.saved), [true, true]);
+});
+
+test('like toggles a track and answers with where it landed', async () => {
+  const d = deps();
+  const seen = [];
+  d.api.setSaved = async (uri, saved) => { seen.push([uri, saved]); };
+
+  assert.deepEqual(
+    (await handleCommand({ name: 'like', args: ['spotify:track:a', true] }, d)).data,
+    { uri: 'spotify:track:a', saved: true },
+  );
+  await handleCommand({ name: 'like', args: ['spotify:track:a', false] }, d);
+
+  assert.deepEqual(seen, [['spotify:track:a', true], ['spotify:track:a', false]]);
+});
+
+test('like with no state asks Spotify which way to go', async () => {
+  const d = deps();
+  d.api.isSaved = async () => [true];
+  let wrote;
+  d.api.setSaved = async (_uri, saved) => { wrote = saved; };
+
+  const result = await handleCommand({ name: 'like', args: ['spotify:track:a'] }, d);
+
+  assert.equal(wrote, false, 'already saved, so the toggle removes it');
+  assert.deepEqual(result.data, { uri: 'spotify:track:a', saved: false });
+});
+
+test('like without a uri is rejected', async () => {
+  const result = await handleCommand({ name: 'like', args: [] }, deps());
+  assert.equal(result.ok, false);
+  assert.match(result.error, /uri/i);
+});
+
 test('jump plays a track inside the context it belongs to', async () => {
   // A queue row reached by playing its uri alone would throw the rest of
   // the playlist away. Spotify keeps the queue when the context is given.

@@ -20,6 +20,12 @@ function describe(err) {
   if (err.status === 429 && err.retryAfter) {
     return `${err.message} — retry in ${err.retryAfter}s`;
   }
+  // A refresh token carries the scopes it was issued with, so a token
+  // older than a scope can never grow into it. Retrying never helps and
+  // Spotify's wording says nothing about what would.
+  if (/insufficient client scope/i.test(err.message ?? '')) {
+    return `${err.message} — this needs a permission your login predates. Run: minitify login`;
+  }
   return err.message;
 }
 
@@ -207,6 +213,25 @@ export async function handleCommand(cmd, deps) {
           await start();
         }
         return ok();
+      }
+
+      case 'liked': {
+        // Everything in here is saved by definition, so the panel is told
+        // so rather than asking about each row in turn.
+        const tracks = await api.savedTracks();
+        return ok(tracks.map((track) => ({ ...track, saved: true })));
+      }
+
+      case 'like': {
+        const uri = args[0];
+        if (!uri) return fail('like needs a Spotify uri');
+        // The panel knows what its heart is showing and says which way to
+        // go. Without that — a media key, say — ask before writing.
+        const saved = args[1] === undefined
+          ? !(await api.isSaved([uri]))[0]
+          : Boolean(args[1]);
+        await api.setSaved(uri, saved);
+        return ok({ uri, saved });
       }
 
       case 'jump': {
